@@ -37,6 +37,26 @@ export default function Home() {
     localStorage.setItem("cart", JSON.stringify(updated));
   };
 
+  // Function to get product image based on product name/category
+  const getProductImage = (product) => {
+    const name = product.name?.toLowerCase() || "";
+    const category = product.category?.toLowerCase() || "";
+    
+    if (name.includes("nike") && name.includes("air")) {
+      return "https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400&h=300&fit=crop";
+    } else if (name.includes("cortez") || name.includes("nike")) {
+      return "https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=400&h=300&fit=crop";
+    } else if (category.includes("sports") || category.includes("basketball")) {
+      return "https://images.unsplash.com/photo-1515955656352-a1fa3ffcd111?w=400&h=300&fit=crop";
+    } else if (category.includes("running")) {
+      return "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&h=300&fit=crop";
+    } else if (category.includes("chill")) {
+      return "https://images.unsplash.com/photo-1560769629-975ec94e6a86?w=400&h=300&fit=crop";
+    } else {
+      return "https://images.unsplash.com/photo-1460353581641-37baddab0fa2?w=400&h=300&fit=crop";
+    }
+  };
+
   const categories = ["All", "Sports", "Chill", "Basketball","Running"];
   const cartItemCount = cart.reduce((s, i) => s + (i.qty || 0), 0);
 
@@ -46,28 +66,33 @@ export default function Home() {
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-6">
               <div className="w-6 h-6 text-gray-600 cursor-pointer hover:text-gray-800">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </div>
-              <h1 className="text-xl font-semibold text-gray-800">logo</h1>
-            </div>
-            
-            {/* Search Bar - Desktop */}
-            <div className="hidden md:block flex-1 max-w-lg mx-8">
-              <div className="relative">
-                <div className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2">
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
+              <div className="flex items-center">
+                <svg className="w-8 h-8 text-black" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M2.8 5.1C2 4.4 1.6 3.5 1.6 2.4c0-.7.2-1.3.6-1.8.4-.5 1-.7 1.7-.7.8 0 1.4.3 1.9.8.5.6.7 1.3.7 2.2 0 .8-.2 1.5-.6 2.1-.4.6-1 1.1-1.8 1.5L2.8 5.1zM24 18.9c0 .6-.1 1.1-.4 1.5-.2.4-.6.7-1.1.9-.5.2-1 .3-1.6.3-.7 0-1.3-.1-1.8-.4-.5-.3-.9-.7-1.2-1.2-.3-.5-.4-1.1-.4-1.7 0-.8.2-1.5.6-2.1.4-.6.9-1.1 1.6-1.4.7-.3 1.4-.5 2.2-.5.9 0 1.6.2 2.2.6.6.4.9 1 .9 1.8v.2zM1.6 21.1c0-.4.1-.7.2-1 .1-.3.3-.5.5-.7.2-.2.4-.3.7-.4.3-.1.6-.1.9-.1.4 0 .7 0 1 .1.3.1.5.2.7.4.2.2.4.4.5.7.1.3.2.6.2 1s-.1.7-.2 1c-.1.3-.3.5-.5.7-.2.2-.4.3-.7.4-.3.1-.6.1-1 .1-.3 0-.6 0-.9-.1-.3-.1-.5-.2-.7-.4-.2-.2-.4-.4-.5-.7-.1-.3-.2-.6-.2-1z"/>
+                </svg>
+                <span className="ml-2 text-xl font-bold text-black">NIKE</span>
+              </div>
+              
+              {/* Search Bar - Desktop - Moved closer to logo */}
+              <div className="hidden md:block">
+                <div className="relative w-80">
+                  <div className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Search products..."
+                    className="w-full pl-9 pr-4 py-2 bg-gray-50 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent text-sm"
+                  />
                 </div>
-                <input
-                  type="text"
-                  placeholder="Search products..."
-                  className="w-full pl-10 pr-4 py-2 bg-gray-50 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent"
-                />
               </div>
             </div>
 
@@ -139,9 +164,16 @@ export default function Home() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {products.map((p) => (
               <div key={p._id} className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-                {/* Product Image Placeholder */}
-                <div className="w-full h-48 bg-gray-100 rounded-t-lg flex items-center justify-center">
-                  <div className="w-20 h-20 bg-gray-200 rounded-lg"></div>
+                {/* Product Image - Real images based on product */}
+                <div className="w-full h-48 bg-gray-100 rounded-t-lg overflow-hidden">
+                  <img 
+                    src={getProductImage(p)} 
+                    alt={p.name || "Product"} 
+                    className="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
+                    onError={(e) => {
+                      e.target.src = "https://images.unsplash.com/photo-1460353581641-37baddab0fa2?w=400&h=300&fit=crop";
+                    }}
+                  />
                 </div>
                 
                 {/* Product Info */}

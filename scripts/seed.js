@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   // Dummy data
   const products = [
 
-    { name: "kuntul", category: "Data", price: 85000 }
+    { name: "test", category: "Data", price: 85000 }
   ];
 
   await Product.deleteMany({});
