@@ -74,46 +74,6 @@ export default function PaymentPage() {
               />
             </div>
 
-            {/* Payment Method */}
-            <div>
-              <h2 className="text-base font-medium text-gray-800 mb-3">Payment Method</h2>
-              <div className="space-y-3">
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="credit-card"
-                    checked={paymentMethod === "credit-card"}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <span className="ml-3 text-gray-700">Credit/Debit Card</span>
-                </label>
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="paypal"
-                    checked={paymentMethod === "paypal"}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <span className="ml-3 text-gray-700">PayPal</span>
-                </label>
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="other"
-                    checked={paymentMethod === "other"}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <span className="ml-3 text-gray-700">Other (E-Wallet, Bank Transfer)</span>
-                </label>
-              </div>
-            </div>
-
             {/* Order Summary */}
             <div>
               <h2 className="text-base font-medium text-gray-800 mb-3">Order Summary</h2>

@@ -37,7 +37,7 @@ export default function Home() {
     localStorage.setItem("cart", JSON.stringify(updated));
   };
 
-  const categories = ["All", "Drinks", "Snacks", "Bundle"];
+  const categories = ["All", "Sports", "Chill", "Basketball","Running"];
   const cartItemCount = cart.reduce((s, i) => s + (i.qty || 0), 0);
 
   return (
@@ -132,7 +132,7 @@ export default function Home() {
           <div className="text-center py-16">
             <div className="bg-white rounded-lg shadow-sm p-8 max-w-md mx-auto">
               <p className="text-gray-500 text-lg">No products found.</p>
-              <p className="text-gray-400 text-sm mt-2">Coba /api/seed dulu.</p>
+              <p className="text-gray-400 text-sm mt-2">Loading.</p>
             </div>
           </div>
         ) : (
