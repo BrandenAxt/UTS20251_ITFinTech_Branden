@@ -1,66 +1,65 @@
 import dbConnect from "../../lib/db";
 import Payment from "../../models/Payment";
 
-// tetap pakai raw body (kalau nanti mau verifikasi signature Xendit)
-export const config = {
-  api: { bodyParser: false },
-};
+export const config = { api: { bodyParser: false } };
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
     await dbConnect();
 
-    // collect raw body
+    // raw body
     const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
+    for await (const c of req) chunks.push(c);
     const rawBody = Buffer.concat(chunks).toString("utf8");
 
-    // safe JSON parse
+    // (opsional) verifikasi token dari Xendit jika ada
+    const token = req.headers["x-callback-token"];
+    if (process.env.XENDIT_CALLBACK_TOKEN) {
+      if (!token || token !== process.env.XENDIT_CALLBACK_TOKEN) {
+        console.warn("Invalid Xendit callback token");
+        return res.status(401).json({ error: "Invalid callback token" });
+      }
+    }
+
+    // parse payload
     let payload;
     try {
       payload = JSON.parse(rawBody);
-    } catch (e) {
+    } catch {
       console.error("Webhook invalid JSON:", rawBody);
       return res.status(400).json({ error: "Invalid JSON" });
     }
 
-    console.log("🟣 Xendit Webhook payload:", payload);
-
-    // read status & external_id from top-level or nested data
     const status = payload?.status || payload?.data?.status;
     const externalId = payload?.external_id || payload?.data?.external_id;
 
     if (!externalId) {
-      console.warn("⚠️ external_id not found in payload");
-      return res.status(200).json({ received: true, note: "external_id missing" });
+      console.warn("Webhook missing external_id");
+      return res.status(200).json({ received: true });
     }
 
     if (status === "PAID" || status === "SETTLED") {
-      console.log("➡️  Will update by external_id:", externalId, "with status:", status);
-
-      // SATU QUERY yang cover 2 kemungkinan: _id = externalId ATAU checkoutId = externalId
+      // cover 2 kemungkinan: external_id == _id (rekomendasi) atau == checkoutId
       const updated = await Payment.findOneAndUpdate(
         { $or: [{ _id: externalId }, { checkoutId: externalId }] },
         { status: "LUNAS" },
         { new: true }
       );
-
       if (updated) {
         console.log("✅ Payment updated to LUNAS:", updated._id);
       } else {
-        console.warn("❌ No Payment matched for external_id:", externalId);
+        console.warn("❌ Payment not found for external_id:", externalId);
       }
     } else {
-      console.log("ℹ️ Webhook non-paid status:", status);
+      console.log("ℹ️ Non-paid status:", status);
     }
 
+    // selalu 200 supaya Xendit ga retry spam
     return res.status(200).json({ received: true });
   } catch (err) {
     console.error("Webhook error:", err);
-    return res.status(500).json({ error: "Webhook handling error" });
+    return res.status(200).json({ received: true }); // tetap 200
   }
 }

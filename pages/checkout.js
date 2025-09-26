@@ -94,9 +94,35 @@ export default function CheckoutPage() {
                 <div className="space-y-4">
                   {cart.map((item) => (
                     <div key={item._id} className="flex items-center space-x-4 p-4 border border-gray-200 rounded-lg hover:shadow-sm transition-shadow">
-                      {/* Product Image Placeholder */}
-                      <div className="w-16 h-16 bg-gray-100 rounded-lg flex-shrink-0 flex items-center justify-center">
-                        <div className="w-8 h-8 bg-gray-200 rounded"></div>
+                      {/* Product Image */}
+                      <div className="w-20 h-20 bg-gray-50 rounded-lg flex-shrink-0 overflow-hidden">
+                        {item.image ? (
+                          <img 
+                            src={item.image} 
+                            alt={item.name || "Nike Product"}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&q=80";
+                            }}
+                          />
+                        ) : item.images && item.images.length > 0 ? (
+                          <img 
+                            src={item.images[0]} 
+                            alt={item.name || "Nike Product"}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&q=80";
+                            }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                        )}
                       </div>
                       
                       {/* Product Info */}
@@ -104,6 +130,9 @@ export default function CheckoutPage() {
                         <h3 className="font-semibold text-gray-800 text-base mb-1">
                           {item.name || "Product Name"}
                         </h3>
+                        {item.category && (
+                          <p className="text-xs text-gray-500 mb-1">{item.category}</p>
+                        )}
                         <p className="text-gray-600 text-sm">
                           Rp{(item.price || 0).toLocaleString()} per item
                         </p>
