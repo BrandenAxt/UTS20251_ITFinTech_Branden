@@ -1,16 +1,15 @@
-import dbConnect from "../../lib/db";
-import Product from "../../models/Product";
-import Checkout from "../../models/Checkout";
-import Payment from "../../models/Payment";
+import dbConnect from "../lib/db";
+import Product from "../models/Product";
+import Checkout from "../models/Checkout";
+import Payment from "../models/Payment";
 
 export default async function handler(req, res) {
   await dbConnect();
 
   // Dummy data
   const products = [
-    { name: "Pulsa 50K", category: "Pulsa", price: 50000 },
-    { name: "Pulsa 100K", category: "Pulsa", price: 100000 },
-    { name: "Data 5GB", category: "Data", price: 75000 }
+
+    { name: "kuntul", category: "Data", price: 85000 }
   ];
 
   await Product.deleteMany({});

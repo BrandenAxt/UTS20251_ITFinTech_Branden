@@ -52,7 +52,7 @@ export default function Home() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </div>
-              <h1 className="text-xl font-semibold text-gray-800">Logo</h1>
+              <h1 className="text-xl font-semibold text-gray-800">logo</h1>
             </div>
             
             {/* Search Bar - Desktop */}
