@@ -17,7 +17,7 @@ export default function CheckoutPage() {
   };
 
   const subtotal = cart.reduce(
-    (sum, item) => sum + item.price * (item.qty || 1),
+    (sum, item) => sum + (item.price || 0) * (item.qty || 1),
     0
   );
 
@@ -105,7 +105,7 @@ export default function CheckoutPage() {
                           {item.name || "Product Name"}
                         </h3>
                         <p className="text-gray-600 text-sm">
-                          Rp{item.price.toLocaleString()} per item
+                          Rp{(item.price || 0).toLocaleString()} per item
                         </p>
                         
                         {/* Quantity Controls */}
@@ -143,7 +143,7 @@ export default function CheckoutPage() {
                       {/* Price */}
                       <div className="text-right">
                         <p className="text-xl font-bold text-gray-800">
-                          Rp{(item.price * (item.qty || 1)).toLocaleString()}
+                          Rp{((item.price || 0) * (item.qty || 1)).toLocaleString()}
                         </p>
                         <p className="text-sm text-gray-500 mt-1">
                           Total for {item.qty || 1} item{(item.qty || 1) > 1 ? 's' : ''}
