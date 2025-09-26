@@ -1,7 +1,7 @@
 import dbConnect from "../../lib/db";
 import Payment from "../../models/Payment";
 
-// still use raw body to allow Xendit signature verification later
+// tetap pakai raw body (kalau nanti mau verifikasi signature Xendit)
 export const config = {
   api: { bodyParser: false },
 };
@@ -39,11 +39,12 @@ export default async function handler(req, res) {
       return res.status(200).json({ received: true, note: "external_id missing" });
     }
 
-    // we set external_id = payment._id when creating invoice
-    // so we try to update by _id first
     if (status === "PAID" || status === "SETTLED") {
-      const updated = await Payment.findByIdAndUpdate(
-        externalId,
+      console.log("➡️  Will update by external_id:", externalId, "with status:", status);
+
+      // SATU QUERY yang cover 2 kemungkinan: _id = externalId ATAU checkoutId = externalId
+      const updated = await Payment.findOneAndUpdate(
+        { $or: [{ _id: externalId }, { checkoutId: externalId }] },
         { status: "LUNAS" },
         { new: true }
       );
@@ -51,20 +52,10 @@ export default async function handler(req, res) {
       if (updated) {
         console.log("✅ Payment updated to LUNAS:", updated._id);
       } else {
-        // fallback: maybe external_id was checkoutId
-        const fallback = await Payment.findOneAndUpdate(
-          { checkoutId: externalId },
-          { status: "LUNAS" },
-          { new: true }
-        );
-        if (fallback) {
-          console.log("✅ Payment updated via checkoutId fallback:", fallback._id);
-        } else {
-          console.warn("❓ Payment doc not found for external_id:", externalId);
-        }
+        console.warn("❌ No Payment matched for external_id:", externalId);
       }
     } else {
-      console.log("ℹ️ Non-paid status received:", status);
+      console.log("ℹ️ Webhook non-paid status:", status);
     }
 
     return res.status(200).json({ received: true });
