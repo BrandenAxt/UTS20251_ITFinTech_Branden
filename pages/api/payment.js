@@ -13,7 +13,7 @@ export default async function handler(req, res) {
     try {
       const { checkoutId, amount } = req.body;
 
-      // 1. Simpan payment ke DB
+      // 1. Simpan payment ke DB dengan status awal PENDING
       const payment = await Payment.create({
         checkoutId,
         amount,
@@ -30,7 +30,7 @@ export default async function handler(req, res) {
             Buffer.from(process.env.XENDIT_SECRET_KEY + ":").toString("base64"),
         },
         body: JSON.stringify({
-          external_id: payment._id.toString(),
+          external_id: payment._id.toString(), // pakai _id payment sebagai identifier unik
           amount,
           description: `Payment for checkout ${checkoutId}`,
           currency: "IDR",
@@ -38,7 +38,7 @@ export default async function handler(req, res) {
       });
 
       const invoice = await response.json();
-
+      console.log(">>> Xendit Response:", invoice);
       // 3. Return ke frontend
       return res.status(200).json({ payment, invoice });
     } catch (err) {
@@ -49,3 +49,4 @@ export default async function handler(req, res) {
 
   res.status(405).end();
 }
+
