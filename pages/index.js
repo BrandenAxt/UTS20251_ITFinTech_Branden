@@ -4,6 +4,7 @@ export default function Home() {
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
   const [activeCategory, setActiveCategory] = useState("All");
+  const [showLogoutPopup, setShowLogoutPopup] = useState(false);
 
   useEffect(() => {
     // fetch products dari backend (MongoDB)
@@ -35,6 +36,19 @@ export default function Home() {
     }
     setCart(updated);
     localStorage.setItem("cart", JSON.stringify(updated));
+  };
+
+  const handleLogout = () => {
+    // Clear all auth tokens and login states
+    localStorage.removeItem("adminToken");
+    localStorage.removeItem("userToken");
+    localStorage.removeItem("adminLoggedIn");
+    localStorage.removeItem("userLoggedIn");
+    // Optionally clear cart
+    // localStorage.removeItem("cart");
+    
+    // Redirect to login page
+    window.location.href = "/admin/login";
   };
 
   // Function to get product image based on product name/category
@@ -96,7 +110,8 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="relative">
+            <div className="flex items-center space-x-4">
+              {/* Cart Button */}
               <a 
                 href="/checkout"
                 className="flex items-center space-x-2 bg-black hover:bg-gray-800 text-white px-4 py-2 rounded-lg transition-colors"
@@ -113,6 +128,44 @@ export default function Home() {
                   </span>
                 )}
               </a>
+
+              {/* Profile Circle - Now Interactive */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowLogoutPopup(!showLogoutPopup)}
+                  className="w-10 h-10 bg-gradient-to-br from-gray-700 to-gray-900 rounded-full flex items-center justify-center text-white font-semibold hover:from-gray-600 hover:to-gray-800 transition-all shadow-md hover:shadow-lg cursor-pointer"
+                >
+                  <span className="text-sm">N</span>
+                </button>
+
+                {/* Logout Popup */}
+                {showLogoutPopup && (
+                  <>
+                    {/* Backdrop */}
+                    <div 
+                      className="fixed inset-0 z-40"
+                      onClick={() => setShowLogoutPopup(false)}
+                    ></div>
+                    
+                    {/* Popup Menu */}
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden">
+                      <div className="p-3 border-b border-gray-100">
+                        <p className="text-sm font-medium text-gray-900">Account</p>
+                        <p className="text-xs text-gray-500">Manage your account</p>
+                      </div>
+                      <button
+                        onClick={handleLogout}
+                        className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center space-x-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                        <span>Logout</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>

@@ -27,6 +27,7 @@ export default function Dashboard() {
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorInfo, setErrorInfo] = useState(null);
+  const [showLogoutPopup, setShowLogoutPopup] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -78,6 +79,17 @@ export default function Dashboard() {
       setLoading(false);
     })();
   }, [router]);
+
+  const handleLogout = () => {
+    // Clear all auth tokens and login states
+    localStorage.removeItem("adminToken");
+    localStorage.removeItem("userToken");
+    localStorage.removeItem("adminLoggedIn");
+    localStorage.removeItem("userLoggedIn");
+    
+    // Redirect to login page
+    router.push("/admin/login");
+  };
 
   // create / update product
   async function handleAddOrUpdateProduct(e) {
@@ -155,11 +167,112 @@ export default function Dashboard() {
 
   return (
     <div style={{ padding: "24px 32px", fontFamily: "'Inter', system-ui, -apple-system, sans-serif", background: "#f5f5f5", minHeight: "100vh" }}>
-      {/* Header */}
+      {/* Header with Logout */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 28 }}>
         <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, color: "#1a1a1a", letterSpacing: "-0.02em" }}>DASHBOARD</h1>
-        <div style={{ color: "#666", fontSize: 14 }}>
-          {new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div style={{ color: "#666", fontSize: 14 }}>
+            {new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
+          </div>
+          
+          {/* Profile Circle with Logout Popup */}
+          <div style={{ position: "relative" }}>
+            <button
+              onClick={() => setShowLogoutPopup(!showLogoutPopup)}
+              style={{
+                width: 40,
+                height: 40,
+                background: "linear-gradient(135deg, #374151 0%, #1f2937 100%)",
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#fff",
+                fontWeight: 600,
+                fontSize: 14,
+                border: "none",
+                cursor: "pointer",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                transition: "all 0.2s ease"
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.2)";
+                e.currentTarget.style.transform = "translateY(-1px)";
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.15)";
+                e.currentTarget.style.transform = "translateY(0)";
+              }}
+            >
+              A
+            </button>
+
+            {/* Logout Popup */}
+            {showLogoutPopup && (
+              <>
+                {/* Backdrop */}
+                <div 
+                  style={{
+                    position: "fixed",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    zIndex: 40
+                  }}
+                  onClick={() => setShowLogoutPopup(false)}
+                />
+                
+                {/* Popup Menu */}
+                <div style={{
+                  position: "absolute",
+                  right: 0,
+                  marginTop: 8,
+                  width: 200,
+                  background: "#fff",
+                  borderRadius: 8,
+                  boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
+                  border: "1px solid #e5e5e5",
+                  zIndex: 50,
+                  overflow: "hidden"
+                }}>
+                  <div style={{
+                    padding: "12px 16px",
+                    borderBottom: "1px solid #f0f0f0"
+                  }}>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#1a1a1a" }}>Admin Account</p>
+                    <p style={{ margin: "2px 0 0 0", fontSize: 11, color: "#666" }}>Manage your account</p>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "12px 16px",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: "#ef4444",
+                      background: "transparent",
+                      border: "none",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      fontFamily: "inherit",
+                      transition: "background 0.15s ease"
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.background = "#fef2f2"}
+                    onMouseOut={(e) => e.currentTarget.style.background = "transparent"}
+                  >
+                    <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    <span>Logout</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
