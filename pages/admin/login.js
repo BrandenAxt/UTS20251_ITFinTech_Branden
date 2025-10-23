@@ -2,87 +2,143 @@
 import { useState } from "react";
 import { useRouter } from "next/router";
 
-export default function AdminLogin() {
+export default function UniversalAuth() {
   const router = useRouter();
-  const [username, setUsername] = useState("");
+  const [mode, setMode] = useState("login"); // login | register
+  const [role, setRole] = useState("user"); // user | admin
+  const [method, setMethod] = useState("password"); // password | otp
+  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState(""); // admin only
   const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState(""); // E.164 preferred (+62...)
+  const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+
+  async function apiPost(path, body) {
+    const res = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, data };
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setLoading(true);
-    setError("");
-
     try {
-      const res = await fetch("/api/admin/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-
-      const data = await res.json();
-      console.log("🔹 Login response:", res.status, data);
-
-      if (!res.ok) throw new Error(data.error || "Login gagal");
-
-      // Simpan flag + token (jika tersedia)
-      localStorage.setItem("adminLoggedIn", "true");
-
-      if (data.token) {
-        localStorage.setItem("adminToken", data.token);
-        console.log("✅ Token tersimpan:", data.token.substring(0, 20) + "...");
-      } else {
-        console.warn("⚠️ Tidak ada token dari backend, pakai flag login saja.");
+      if (mode === "register") {
+        // register user only (admin seeding handled separately)
+        const target = role === "admin" ? "/api/admin/register" : "/api/auth/register";
+        const payload = role === "admin"
+          ? { username, password } // admin registration (if you want)
+          : { email, phone, password };
+        const { ok, data } = await apiPost(target, payload);
+        if (!ok) throw new Error(data.error || "Register failed");
+        alert("Register OK, please login");
+        setMode("login");
+        return;
       }
 
-      alert("Login berhasil ✅");
-      router.push("/admin/dashboard");
+      // mode === "login"
+      if (method === "password") {
+        // admin uses admin endpoint; user uses /api/auth/login
+        const target = role === "admin" ? "/api/admin/login" : "/api/auth/login";
+        const payload = role === "admin" ? { username, password } : { email, password };
+        const { ok, data } = await apiPost(target, payload);
+        if (!ok) throw new Error(data.error || "Login failed");
+        // store token and redirect
+        if (data.token) localStorage.setItem(role === "admin" ? "adminToken" : "userToken", data.token);
+        localStorage.setItem(role === "admin" ? "adminLoggedIn" : "userLoggedIn", "true");
+        alert("Login success");
+        router.push(role === "admin" ? "/admin/dashboard" : "/");
+        return;
+      }
+
+      // method === "otp" flows:
+      if (!otp) {
+        // send OTP
+        const { ok, data } = await apiPost("/api/auth/send-otp", { phone, role });
+        if (!ok) throw new Error(data.error || "Send OTP failed");
+        alert("OTP sent (check server log / WA mock). Enter OTP and press Login.");
+        return;
+      } else {
+        // verify OTP
+        const { ok, data } = await apiPost("/api/auth/verify-otp", { phone, otp, role });
+        if (!ok) throw new Error(data.error || "OTP verify failed");
+        if (data.token) localStorage.setItem(role === "admin" ? "adminToken" : "userToken", data.token);
+        localStorage.setItem(role === "admin" ? "adminLoggedIn" : "userLoggedIn", "true");
+        alert("Login via OTP success");
+        router.push(role === "admin" ? "/admin/dashboard" : "/");
+        return;
+      }
     } catch (err) {
-      console.error("Login error:", err);
-      setError(err.message);
-      alert("Login error: " + err.message);
+      alert("Error: " + (err.message || err));
+      console.error(err);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white shadow-md rounded-lg p-8 w-full max-w-sm"
-      >
-        <h2 className="text-xl font-semibold mb-4 text-center">
-          Admin Login
-        </h2>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
+      <div className="bg-white rounded-lg shadow p-6 w-full max-w-md">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold">{mode === "register" ? "Register" : "Login"}</h2>
+          <div>
+            <label className="mr-2 text-sm">Role</label>
+            <select value={role} onChange={(e) => setRole(e.target.value)} className="border px-2 py-1 rounded">
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+        </div>
 
-        <input
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          placeholder="Username"
-          className="w-full mb-3 px-3 py-2 border border-gray-300 rounded"
-        />
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Password"
-          className="w-full mb-3 px-3 py-2 border border-gray-300 rounded"
-        />
+        <form onSubmit={handleSubmit}>
+          {/* Toggle method */}
+          <div className="mb-3">
+            <label className="mr-3 text-sm">Method:</label>
+            <button type="button" onClick={() => setMethod("password")} className={`px-3 py-1 mr-2 rounded ${method === "password" ? "bg-black text-white": "bg-gray-100"}`}>Password</button>
+            <button type="button" onClick={() => setMethod("otp")} className={`px-3 py-1 rounded ${method === "otp" ? "bg-black text-white": "bg-gray-100"}`}>WhatsApp OTP</button>
+          </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-black text-white py-2 rounded hover:bg-gray-800 transition"
-        >
-          {loading ? "Logging in..." : "Login"}
-        </button>
+          {/* fields */}
+          {role === "admin" && method === "password" && (
+            <input className="w-full mb-3 px-3 py-2 border rounded" placeholder="Username" value={username} onChange={(e)=>setUsername(e.target.value)} />
+          )}
 
-        {error && (
-          <p className="mt-3 text-red-500 text-sm text-center">{error}</p>
-        )}
-      </form>
+          {method === "password" && role === "user" && (
+            <input className="w-full mb-3 px-3 py-2 border rounded" placeholder="Email" value={email} onChange={(e)=>setEmail(e.target.value)} />
+          )}
+
+          {method === "otp" && (
+            <input className="w-full mb-3 px-3 py-2 border rounded" placeholder="Phone e.g. +62812..." value={phone} onChange={(e)=>setPhone(e.target.value)} />
+          )}
+
+          {method === "password" && (
+            <>
+              <input type="password" className="w-full mb-3 px-3 py-2 border rounded" placeholder="Password" value={password} onChange={(e)=>setPassword(e.target.value)} />
+            </>
+          )}
+
+          {method === "otp" && (
+            <>
+              <input className="w-full mb-3 px-3 py-2 border rounded" placeholder="OTP code" value={otp} onChange={(e)=>setOtp(e.target.value)} />
+            </>
+          )}
+
+          <div className="flex gap-2">
+            <button type="submit" disabled={loading} className="flex-1 bg-black text-white py-2 rounded">
+              {loading ? "Processing..." : (mode === "register" ? "Register" : (method === "otp" && !otp ? "Send OTP" : "Continue"))}
+            </button>
+
+            <button type="button" onClick={()=>setMode(mode==="login"?"register":"login")} className="px-4 py-2 border rounded">
+              {mode === "login" ? "Register" : "Back to Login"}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

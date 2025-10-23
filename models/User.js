@@ -1,4 +1,3 @@
-// models/User.js
 import mongoose from "mongoose";
 
 const OtpSchema = new mongoose.Schema({
@@ -9,7 +8,7 @@ const OtpSchema = new mongoose.Schema({
 const UserSchema = new mongoose.Schema({
   name: { type: String },
   email: { type: String, index: true, sparse: true },
-  phone: { type: String, index: true, sparse: true }, // E.164 e.g. +62812...
+  phone: { type: String, index: true, sparse: true }, // +62 format ideally
   passwordHash: { type: String },
   isPhoneVerified: { type: Boolean, default: false },
   otp: OtpSchema,
