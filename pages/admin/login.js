@@ -85,10 +85,10 @@ export default function UniversalAuth() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
       <div className="bg-white rounded-lg shadow p-6 w-full max-w-md">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold">{mode === "register" ? "Register" : "Login"}</h2>
+          <h2 className="text-xl font-semibold text-gray-900">{mode === "register" ? "Register" : "Login"}</h2>
           <div>
-            <label className="mr-2 text-sm">Role</label>
-            <select value={role} onChange={(e) => setRole(e.target.value)} className="border px-2 py-1 rounded">
+            <label className="mr-2 text-sm text-gray-700">Role</label>
+            <select value={role} onChange={(e) => setRole(e.target.value)} className="border px-2 py-1 rounded text-gray-900">
               <option value="user">User</option>
               <option value="admin">Admin</option>
             </select>
@@ -98,42 +98,42 @@ export default function UniversalAuth() {
         <form onSubmit={handleSubmit}>
           {/* Toggle method */}
           <div className="mb-3">
-            <label className="mr-3 text-sm">Method:</label>
-            <button type="button" onClick={() => setMethod("password")} className={`px-3 py-1 mr-2 rounded ${method === "password" ? "bg-black text-white": "bg-gray-100"}`}>Password</button>
-            <button type="button" onClick={() => setMethod("otp")} className={`px-3 py-1 rounded ${method === "otp" ? "bg-black text-white": "bg-gray-100"}`}>WhatsApp OTP</button>
+            <label className="mr-3 text-sm text-gray-700">Method:</label>
+            <button type="button" onClick={() => setMethod("password")} className={`px-3 py-1 mr-2 rounded ${method === "password" ? "bg-black text-white": "bg-gray-100 text-gray-900"}`}>Password</button>
+            <button type="button" onClick={() => setMethod("otp")} className={`px-3 py-1 rounded ${method === "otp" ? "bg-black text-white": "bg-gray-100 text-gray-900"}`}>WhatsApp OTP</button>
           </div>
 
           {/* fields */}
           {role === "admin" && method === "password" && (
-            <input className="w-full mb-3 px-3 py-2 border rounded" placeholder="Username" value={username} onChange={(e)=>setUsername(e.target.value)} />
+            <input className="w-full mb-3 px-3 py-2 border rounded text-gray-900" placeholder="Username" value={username} onChange={(e)=>setUsername(e.target.value)} />
           )}
 
           {method === "password" && role === "user" && (
-            <input className="w-full mb-3 px-3 py-2 border rounded" placeholder="Email" value={email} onChange={(e)=>setEmail(e.target.value)} />
+            <input className="w-full mb-3 px-3 py-2 border rounded text-gray-900" placeholder="Email" value={email} onChange={(e)=>setEmail(e.target.value)} />
           )}
 
           {method === "otp" && (
-            <input className="w-full mb-3 px-3 py-2 border rounded" placeholder="Phone e.g. +62812..." value={phone} onChange={(e)=>setPhone(e.target.value)} />
+            <input className="w-full mb-3 px-3 py-2 border rounded text-gray-900" placeholder="Phone e.g. +62812..." value={phone} onChange={(e)=>setPhone(e.target.value)} />
           )}
 
           {method === "password" && (
             <>
-              <input type="password" className="w-full mb-3 px-3 py-2 border rounded" placeholder="Password" value={password} onChange={(e)=>setPassword(e.target.value)} />
+              <input type="password" className="w-full mb-3 px-3 py-2 border rounded text-gray-900" placeholder="Password" value={password} onChange={(e)=>setPassword(e.target.value)} />
             </>
           )}
 
           {method === "otp" && (
             <>
-              <input className="w-full mb-3 px-3 py-2 border rounded" placeholder="OTP code" value={otp} onChange={(e)=>setOtp(e.target.value)} />
+              <input className="w-full mb-3 px-3 py-2 border rounded text-gray-900" placeholder="OTP code" value={otp} onChange={(e)=>setOtp(e.target.value)} />
             </>
           )}
 
           <div className="flex gap-2">
-            <button type="submit" disabled={loading} className="flex-1 bg-black text-white py-2 rounded">
+            <button type="submit" disabled={loading} className="w-1/2 bg-black text-white py-2 rounded">
               {loading ? "Processing..." : (mode === "register" ? "Register" : (method === "otp" && !otp ? "Send OTP" : "Continue"))}
             </button>
 
-            <button type="button" onClick={()=>setMode(mode==="login"?"register":"login")} className="px-4 py-2 border rounded">
+            <button type="button" onClick={()=>setMode(mode==="login"?"register":"login")} className="w-1/2 px-4 py-2 border rounded text-gray-900">
               {mode === "login" ? "Register" : "Back to Login"}
             </button>
           </div>
