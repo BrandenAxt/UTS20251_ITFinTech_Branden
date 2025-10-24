@@ -58,21 +58,19 @@ export default function Dashboard() {
       }
 
       // orders
-      let o = [];
       try {
-        o = await fetchJsonSafe("/api/admin/orders-from-payments", token);
+        const o = await fetchJsonSafe("/api/admin/orders-from-payments", token);
         setOrders(Array.isArray(o) ? o : (o.data || []));
       } catch (e) {
         console.warn("orders fetch failed", e);
-        o = [];
         setOrders([]);
       }
 
       // ---------------------------
-      // STATS (Analytics) - improved logic:
+      // STATS (Analytics) - new robust logic:
       // 1) try admin protected endpoint (uses token)
       // 2) fallback to public endpoint if admin fails
-      // 3) if API returns nothing, aggregate totals from `orders` (client-side)
+      // 3) if both fail or return empty, aggregate from orders client-side
       // 4) normalize to continuous date array for last `days`
       // ---------------------------
       const days = 30;
@@ -85,6 +83,7 @@ export default function Dashboard() {
       for (const candidate of statsCandidates) {
         try {
           const r = await fetchJsonSafe(candidate.url, candidate.auth ? token : undefined);
+          // accept array or { data: [...] }
           if (Array.isArray(r) && r.length) {
             statsRaw = r;
             break;
@@ -93,7 +92,7 @@ export default function Dashboard() {
             statsRaw = r.data;
             break;
           }
-          // allow case where endpoint returns empty array (we'll fallback later)
+          // allow empty arrays (we will fallback to orders)
         } catch (err) {
           console.warn("stats candidate failed", candidate.url, err);
         }
@@ -104,15 +103,16 @@ export default function Dashboard() {
       const map = {};
       if (Array.isArray(statsRaw) && statsRaw.length) {
         statsRaw.forEach((it) => {
+          // support legacy shapes: {_id: "YYYY-MM-DD", total: N} or {date: "...", total: N}
           const dateKey = it.date || it._id || (it._id && (typeof it._id === "string" ? it._id : "")) || "";
-          const total = Number(it.total ?? it.amount ?? it.value ?? 0);
+          const total = Number(it.total || it.amount || it.value || 0);
           if (dateKey) map[String(dateKey)] = (map[String(dateKey)] || 0) + (Number.isFinite(total) ? total : 0);
         });
       }
 
       // If API didn't return useful totals, compute from `orders` as fallback
-      if (Object.keys(map).length === 0 && Array.isArray(o) && o.length) {
-        o.forEach((p) => {
+      if (Object.keys(map).length === 0 && Array.isArray(orders) && orders.length) {
+        orders.forEach((p) => {
           try {
             // createdAt might be Date or string or missing, try to coerce
             let created = null;
@@ -580,7 +580,7 @@ export default function Dashboard() {
                     Edit
                   </button>
                   <button 
-                    onClick={() => handleDeleteProduct(p._1d)} 
+                    onClick={() => handleDeleteProduct(p._id)} 
                     style={{ 
                       padding: "6px 14px", 
                       background: "transparent", 
