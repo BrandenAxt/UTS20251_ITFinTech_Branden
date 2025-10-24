@@ -57,95 +57,74 @@ export default function Dashboard() {
         return;
       }
 
-      // orders
+      // 1) Fetch orders from payments endpoint (this is your source)
+      let fetchedOrders = [];
       try {
         const o = await fetchJsonSafe("/api/admin/orders-from-payments", token);
-        setOrders(Array.isArray(o) ? o : (o.data || []));
+        fetchedOrders = Array.isArray(o) ? o : (o.data || []);
+        setOrders(fetchedOrders);
       } catch (e) {
         console.warn("orders fetch failed", e);
+        fetchedOrders = [];
         setOrders([]);
       }
 
       // ---------------------------
-      // STATS (Analytics) - new robust logic:
-      // 1) try admin protected endpoint (uses token)
-      // 2) fallback to public endpoint if admin fails
-      // 3) if both fail or return empty, aggregate from orders client-side
-      // 4) normalize to continuous date array for last `days`
+      // ANALYTICS: build chartData from orders-from-payments
+      // - We take last `days` days and aggregate amounts for status "LUNAS"
+      // - createdAt may be present or not; if missing we parse ObjectId timestamp
       // ---------------------------
-      const days = 30;
-      const statsCandidates = [
-        { url: `/api/admin/stats-from-payments?period=daily&days=${days}`, auth: true },
-        { url: `/api/stats-from-payments?period=daily&days=${days}`, auth: false }, // public fallback
-      ];
+      (function buildAnalyticsFromOrders() {
+        const days = 30;
+        const since = new Date();
+        since.setDate(since.getDate() - (days - 1)); // include today
 
-      let statsRaw = [];
-      for (const candidate of statsCandidates) {
-        try {
-          const r = await fetchJsonSafe(candidate.url, candidate.auth ? token : undefined);
-          // accept array or { data: [...] }
-          if (Array.isArray(r) && r.length) {
-            statsRaw = r;
-            break;
-          }
-          if (r?.data && Array.isArray(r.data) && r.data.length) {
-            statsRaw = r.data;
-            break;
-          }
-          // allow empty arrays (we will fallback to orders)
-        } catch (err) {
-          console.warn("stats candidate failed", candidate.url, err);
-        }
-      }
+        // create map date -> total
+        const map = {};
 
-      // Build a date -> total map from whatever shape the API returned
-      // API expected shape: [{ date: "YYYY-MM-DD", total: 12345 }, ...]
-      const map = {};
-      if (Array.isArray(statsRaw) && statsRaw.length) {
-        statsRaw.forEach((it) => {
-          // support legacy shapes: {_id: "YYYY-MM-DD", total: N} or {date: "...", total: N}
-          const dateKey = it.date || it._id || (it._id && (typeof it._id === "string" ? it._id : "")) || "";
-          const total = Number(it.total || it.amount || it.value || 0);
-          if (dateKey) map[String(dateKey)] = (map[String(dateKey)] || 0) + (Number.isFinite(total) ? total : 0);
-        });
-      }
+        if (Array.isArray(fetchedOrders) && fetchedOrders.length) {
+          fetchedOrders.forEach((p) => {
+            try {
+              // Only count paid orders (status "LUNAS")
+              if (p.status && String(p.status).toUpperCase() !== "LUNAS") return;
 
-      // If API didn't return useful totals, compute from `orders` as fallback
-      if (Object.keys(map).length === 0 && Array.isArray(orders) && orders.length) {
-        orders.forEach((p) => {
-          try {
-            // createdAt might be Date or string or missing, try to coerce
-            let created = null;
-            if (p.createdAt) created = new Date(p.createdAt);
-            else if (p._id) {
-              // convert ObjectId timestamp portion to date (best-effort)
-              try {
-                const hex = String(p._id).slice(0, 8);
-                const secs = parseInt(hex, 16);
-                created = new Date(secs * 1000);
-              } catch (e) {
-                created = null;
+              // determine created date
+              let created = null;
+              if (p.createdAt) {
+                created = new Date(p.createdAt);
+              } else if (p._id) {
+                // try to extract timestamp from ObjectId
+                try {
+                  const hex = String(p._id).slice(0, 8);
+                  const secs = parseInt(hex, 16);
+                  created = new Date(secs * 1000);
+                } catch (e) {
+                  created = null;
+                }
               }
+
+              if (!created || isNaN(created.getTime())) return;
+              if (created < since) return; // outside range
+
+              // YYYY-MM-DD key
+              const dateKey = created.toISOString().slice(0, 10);
+              const amount = Number(p.amount || 0);
+              map[dateKey] = (map[dateKey] || 0) + (Number.isFinite(amount) ? amount : 0);
+            } catch (e) {
+              // ignore bad rows
             }
-            if (!created || isNaN(created.getTime())) return;
-            // use ISO date part (YYYY-MM-DD) to match server format
-            const dateKey = created.toISOString().slice(0, 10);
-            const amount = Number(p.amount || 0);
-            map[dateKey] = (map[dateKey] || 0) + (Number.isFinite(amount) ? amount : 0);
-          } catch (e) {
-            // ignore bad rows
-          }
-        });
-      }
+          });
+        }
 
-      // generate continuous array for last `days`
-      const dateRange = buildDateRange(days);
-      const normalizedStats = dateRange.map((d) => ({
-        date: d,
-        total: Number(map[d] || 0),
-      }));
+        // build continuous array for last `days`
+        const dateRange = buildDateRange(days);
+        const normalizedStats = dateRange.map((d) => ({
+          date: d,
+          total: Number(map[d] || 0),
+        }));
 
-      setChartData(normalizedStats);
+        setChartData(normalizedStats);
+      })();
 
       // products
       try {
