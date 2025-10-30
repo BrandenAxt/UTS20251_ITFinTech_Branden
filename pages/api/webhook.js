@@ -119,8 +119,7 @@
 import dbConnect from "../../lib/db";
 import Payment from "../../models/Payment";
 import Checkout from "../../models/Checkout";
-// Import sendWhatsAppViaFonnte dan formatCartItems dari lib/fonnte
-import { sendWhatsAppViaFonnte, formatCartItems } from "../../lib/fonnte"; 
+import { sendWhatsAppViaFonnte } from "../../lib/fonnte"; // ✅ cuma pakai ini aja, formatCartItems dihapus
 
 export const config = { api: { bodyParser: false } };
 
@@ -134,24 +133,24 @@ function normalizePhone(raw) {
   if (s.startsWith("+")) return s;
   if (s.startsWith("0")) return "+62" + s.slice(1);
   if (/^62\d+/.test(s)) return "+" + s;
-  // Menangani nomor yang diawali 8xx (misal 8123456789)
-  if (/^[8]\d+/.test(s) && s.length >= 8) return "+62" + s; 
+  if (/^[8]\d+/.test(s) && s.length >= 8) return "+62" + s;
   if (/^[1-9]\d+/.test(s) && s.length >= 8) return "+" + s;
   return "+" + s;
 }
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "Method not allowed" });
 
   try {
     await dbConnect();
 
-    // Raw body parsing (untuk verifikasi Xendit)
+    // Baca raw body dari webhook
     const chunks = [];
     for await (const c of req) chunks.push(c);
     const rawBody = Buffer.concat(chunks).toString("utf8");
 
-    // optional verification token
+    // Verifikasi token dari Xendit (optional)
     const token = req.headers["x-callback-token"];
     if (process.env.XENDIT_CALLBACK_TOKEN) {
       if (!token || token !== process.env.XENDIT_CALLBACK_TOKEN) {
@@ -160,7 +159,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // parse payload
+    // Parse payload JSON
     let payload;
     try {
       payload = JSON.parse(rawBody);
@@ -169,7 +168,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Invalid JSON" });
     }
 
-    // Ambil Status dan External ID
+    // Ambil status & ID pembayaran
     const status = payload?.status || payload?.data?.status;
     const externalId = payload?.external_id || payload?.data?.external_id;
 
@@ -179,9 +178,9 @@ export default async function handler(req, res) {
     }
 
     if (status === "PAID" || status === "SETTLED") {
-      console.log("🔔 Webhook received: Payment status is", status, "for ID:", externalId);
-      
-      // 1. Update Payment status
+      console.log("🔔 Payment success for:", externalId);
+
+      // Update payment jadi LUNAS
       const payment = await Payment.findOneAndUpdate(
         { $or: [{ _id: externalId }, { checkoutId: externalId }] },
         { status: "LUNAS" },
@@ -192,67 +191,56 @@ export default async function handler(req, res) {
         console.warn("Payment not found:", externalId);
         return res.status(200).json({ received: true });
       }
-      
-      console.log("✅ Payment updated to LUNAS (DB ID):", payment._id);
 
-      // 2. Ambil dokumen Checkout (menggunakan payment.checkoutId)
-      const checkout = await Checkout.findById(payment.checkoutId || externalId).lean();
-      
+      console.log("✅ Payment updated to LUNAS:", payment._id);
+
+      // Ambil checkout detail
+      const checkout = await Checkout.findById(
+        payment.checkoutId || externalId
+      ).lean();
+
       if (!checkout) {
-        console.warn("Checkout not found:", payment.checkoutId);
+        console.warn("Checkout not found for:", payment.checkoutId);
         return res.status(200).json({ received: true });
       }
 
-      // 3. Tentukan nomor telepon (dari Checkout atau Payment)
       const phone = normalizePhone(checkout.phone || payment.phone);
-      
       if (!phone) {
-        console.warn("No phone available, skip WA notification for:", payment._id);
+        console.warn("No phone number found, skip WA notification");
         return res.status(200).json({ received: true });
       }
-      
-      // LOG KRITIS SEBELUM MEMANGGIL FONNTE
-      console.log(`🔍 Preparing to send WA via Fonnte. Target Phone (Normalized): ${phone.slice(0, 4)}XXXXX. Token length: ${process.env.FONNTE_TOKEN?.length}.`);
 
+      // Buat pesan singkat invoice
+      let message = `✅ *Pembayaran Berhasil!*\n\nTerima kasih sudah berbelanja 🙌\n\n*Rincian Pesanan:*\n`;
+      if (checkout.items && Array.isArray(checkout.items)) {
+        checkout.items.forEach((it) => {
+          message += `• ${it.name} x${it.qty || 1} = Rp${(
+            it.price * (it.qty || 1)
+          ).toLocaleString("id-ID")}\n`;
+        });
+      }
+      const total = checkout.total || payment.amount || 0;
+      message += `\n*Total:* Rp${Number(total).toLocaleString("id-ID")}\n\nPesanan Anda sedang diproses ✅`;
 
-      // 4. BUAT PESAN INVOICE DENGAN DETAIL BARANG
-      const itemsText = formatCartItems(checkout.items);
-      const totalText = Number(checkout.total || payment.amount || 0).toLocaleString("id-ID");
-
-      const msg = `
-✅ *Pembayaran Berhasil!*
-
-Terima kasih, pembayaran Anda telah kami terima. Berikut rincian pesanan Anda:
-
-🧾 *Invoice ID:* ${payment.checkoutId || String(payment._id)}
-🛍️ *Detail Pesanan:*
-${itemsText}
-
-💰 *Total:* Rp ${totalText}
-
-Pesanan Anda sedang kami proses ✅. Terima kasih sudah berbelanja!
-(Toko Anda Online)
-`;
-
-      // 5. Kirim via Fonnte
-      const result = await sendWhatsAppViaFonnte(phone, msg);
-
+      // Kirim via Fonnte
+      const result = await sendWhatsAppViaFonnte(phone, message);
       if (result.ok) {
-        console.log(`✅ Fonnte WA Invoice terkirim ke ${phone.slice(0, 4)}XXXXX for payment:`, payment._id);
+        console.log(`✅ Fonnte WA Invoice terkirim ke ${phone}`);
       } else {
-        console.error(`❌ Fonnte WA Invoice GAGAL terkirim. Phone: ${phone.slice(0, 4)}XXXXX. Reason:`, result.reason, "Details:", result.details);
+        console.error(
+          `❌ Fonnte WA gagal kirim ke ${phone}. Reason:`,
+          result.reason
+        );
       }
 
       return res.status(200).json({ received: true });
-
-    } else {
-      console.log("ℹ️ Non-paid status:", status);
     }
 
+    console.log("ℹ️ Non-paid status:", status);
     return res.status(200).json({ received: true });
   } catch (err) {
-    console.error("Webhook main error:", err && err.message ? err.message : err);
-    // Selalu kembalikan 200 agar Xendit tidak mencoba mengirim ulang terus-menerus
-    return res.status(200).json({ received: true }); 
+    console.error("Webhook main error:", err);
+    // Jangan balas error ke Xendit, supaya ga retry terus
+    return res.status(200).json({ received: true });
   }
 }
