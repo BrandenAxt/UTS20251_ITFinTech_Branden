@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 export default function CheckoutPage() {
   const [cart, setCart] = useState([]);
+  const [loadingCheckout, setLoadingCheckout] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("cart");
@@ -20,28 +21,39 @@ export default function CheckoutPage() {
     (sum, item) => sum + (item.price || 0) * (item.qty || 1),
     0
   );
-
   const tax = Math.round(subtotal * 0.1); // 10% tax
   const total = subtotal + tax;
 
   const handleCheckout = async () => {
+    if (!cart || cart.length === 0) return alert("Cart kosong");
+
+    const savedPhone =
+      typeof window !== "undefined" ? localStorage.getItem("userPhone") : null;
+
+    setLoadingCheckout(true);
     try {
+      const body = {
+        items: cart,
+        total: total,
+      };
+      // sertakan phoneNumber hanya kalau tersedia (mis. dari OTP flow)
+      if (savedPhone) body.phone = savedPhone;
+
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: cart,
-          total: total,
-        }),
+        body: JSON.stringify(body),
       });
+
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Checkout gagal");
 
-      const checkoutId = data._id || data.id;
-      // Replace with your navigation method
+      const checkoutId = data._id || data.id || data.checkoutId;
       window.location.href = `/payment?checkoutId=${checkoutId}&amount=${total}`;
     } catch (err) {
-      alert("Error: " + err.message);
+      alert("Error: " + (err.message || err));
+    } finally {
+      setLoadingCheckout(false);
     }
   };
 
@@ -55,7 +67,7 @@ export default function CheckoutPage() {
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center h-16">
-            <button 
+            <button
               onClick={handleBack}
               className="flex items-center text-gray-600 hover:text-gray-800 mr-6"
             >
@@ -75,9 +87,8 @@ export default function CheckoutPage() {
           {/* Cart Items Section */}
           <div className="lg:col-span-2">
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-
               <h2 className="text-lg font-semibold text-gray-800 mb-6">Shopping Cart</h2>
-              
+
               {cart.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -97,8 +108,8 @@ export default function CheckoutPage() {
                       {/* Product Image */}
                       <div className="w-20 h-20 bg-gray-50 rounded-lg flex-shrink-0 overflow-hidden">
                         {item.image ? (
-                          <img 
-                            src={item.image} 
+                          <img
+                            src={item.image}
                             alt={item.name || "Nike Product"}
                             className="w-full h-full object-cover"
                             onError={(e) => {
@@ -107,8 +118,8 @@ export default function CheckoutPage() {
                             }}
                           />
                         ) : item.images && item.images.length > 0 ? (
-                          <img 
-                            src={item.images[0]} 
+                          <img
+                            src={item.images[0]}
                             alt={item.name || "Nike Product"}
                             className="w-full h-full object-cover"
                             onError={(e) => {
@@ -124,7 +135,7 @@ export default function CheckoutPage() {
                           </div>
                         )}
                       </div>
-                      
+
                       {/* Product Info */}
                       <div className="flex-1">
                         <h3 className="font-semibold text-gray-800 text-base mb-1">
@@ -136,7 +147,7 @@ export default function CheckoutPage() {
                         <p className="text-gray-600 text-sm">
                           Rp{(item.price || 0).toLocaleString()} per item
                         </p>
-                        
+
                         {/* Quantity Controls */}
                         <div className="flex items-center mt-3 space-x-3">
                           <span className="text-sm text-gray-600 font-medium">Quantity:</span>
@@ -151,11 +162,11 @@ export default function CheckoutPage() {
                               </svg>
                             </div>
                           </button>
-                          
+
                           <span className="w-12 text-center font-semibold text-gray-800 bg-white border border-gray-200 rounded px-2 py-1">
                             {item.qty || 1}
                           </span>
-                          
+
                           <button
                             onClick={() => updateQty(item._id, 1)}
                             className="w-8 h-8 bg-gray-100 border border-gray-300 rounded-lg flex items-center justify-center text-gray-600 hover:bg-gray-200 transition-colors"
@@ -168,7 +179,7 @@ export default function CheckoutPage() {
                           </button>
                         </div>
                       </div>
-                      
+
                       {/* Price */}
                       <div className="text-right">
                         <p className="text-xl font-bold text-gray-800">
@@ -190,18 +201,18 @@ export default function CheckoutPage() {
             <div className="lg:col-span-1">
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 sticky top-8">
                 <h2 className="text-lg font-semibold text-gray-800 mb-6">Order Summary</h2>
-                
+
                 <div className="space-y-4 mb-6">
                   <div className="flex justify-between text-gray-600">
                     <span>Subtotal</span>
                     <span className="font-medium">Rp{subtotal.toLocaleString()}</span>
                   </div>
-                  
+
                   <div className="flex justify-between text-gray-600">
                     <span>Tax (10%)</span>
                     <span className="font-medium">Rp{tax.toLocaleString()}</span>
                   </div>
-                  
+
                   <div className="border-t border-gray-200 pt-4">
                     <div className="flex justify-between text-xl font-bold text-gray-800">
                       <span>Total</span>
@@ -212,9 +223,10 @@ export default function CheckoutPage() {
 
                 <button
                   onClick={handleCheckout}
+                  disabled={loadingCheckout}
                   className="w-full bg-gray-900 hover:bg-gray-800 text-white py-3 px-6 rounded-lg font-semibold text-lg flex items-center justify-center space-x-2 transition-colors shadow-md"
                 >
-                  <span>Pay</span>
+                  <span>{loadingCheckout ? "Processing..." : "Pay"}</span>
                   <div className="w-5 h-5">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />

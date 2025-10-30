@@ -7,6 +7,7 @@ export default function PaymentPage() {
   const [loading, setLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("credit-card");
   const [shippingAddress, setShippingAddress] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
 
   const handlePay = async () => {
     setLoading(true);
@@ -17,6 +18,7 @@ export default function PaymentPage() {
         body: JSON.stringify({
           checkoutId,
           amount: Number(amount),
+          phoneNumber,
         }),
       });
       const data = await res.json();
@@ -71,6 +73,18 @@ export default function PaymentPage() {
                 placeholder="Enter your full shipping address..."
                 className="w-full p-3 border border-gray-200 rounded-lg bg-white focus:ring-2 resize-none placeholder-gray-500 text-gray-800"
                 rows={3}
+              />
+            </div>
+
+            {/* Phone Number */}
+            <div>
+              <h2 className="text-base font-medium text-gray-800 mb-3">Phone Number</h2>
+              <input
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                placeholder="Enter your phone number..."
+                className="w-full p-3 border border-gray-200 rounded-lg bg-white focus:ring-2 placeholder-gray-500 text-gray-800"
               />
             </div>
 
