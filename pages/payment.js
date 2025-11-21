@@ -9,8 +9,15 @@ export default function PaymentPage() {
   const [shippingAddress, setShippingAddress] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
 
+  // TANPA TYPE
+  const [qrUrl, setQrUrl] = useState(null);
+  const [orderId, setOrderId] = useState(null);
+
   const handlePay = async () => {
     setLoading(true);
+    setQrUrl(null);
+    setOrderId(null);
+
     try {
       const res = await fetch("/api/payment", {
         method: "POST",
@@ -19,19 +26,33 @@ export default function PaymentPage() {
           checkoutId,
           amount: Number(amount),
           phoneNumber,
+          shippingAddress,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Payment gagal");
 
-      const invoiceUrl =
-        data.invoice?.invoice_url || data.xenditInvoice?.invoice_url;
-      if (invoiceUrl) {
-        window.location.href = invoiceUrl;
-      } else {
-        alert("Invoice URL tidak ditemukan di response");
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.message || "Payment gagal");
       }
+
+      const mid = data.midtrans;
+      setOrderId(data.orderId);
+
+      // buang `: any`, biarin JS biasa
+      const qr =
+        mid?.actions?.find(a => a.name === "generate-qr-code")?.url ||
+        mid?.qr_url ||
+        null;
+
+      if (!qr) {
+        console.error("Response Midtrans:", mid);
+        alert("QR URL tidak ditemukan di response Midtrans. Cek log backend.");
+        return;
+      }
+
+      setQrUrl(qr);
     } catch (err) {
+      console.error(err);
       alert("Error: " + err.message);
     } finally {
       setLoading(false);
@@ -94,7 +115,9 @@ export default function PaymentPage() {
               <div className="bg-gray-50 rounded-lg p-4 space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Item(s)</span>
-                  <span className="text-gray-800">Rp {Number(amount || 0).toLocaleString()}</span>
+                  <span className="text-gray-800">
+                    Rp {Number(amount || 0).toLocaleString()}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Shipping</span>
@@ -103,7 +126,9 @@ export default function PaymentPage() {
                 <div className="border-t border-gray-200 pt-3">
                   <div className="flex justify-between font-medium">
                     <span className="text-gray-800">Total</span>
-                    <span className="text-gray-800">Rp {Number(amount || 0).toLocaleString()}</span>
+                    <span className="text-gray-800">
+                      Rp {Number(amount || 0).toLocaleString()}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -117,11 +142,34 @@ export default function PaymentPage() {
             >
               {loading ? "Processing..." : "Confirm & Pay"}
             </button>
+
+            {/* QR Section */}
+            {qrUrl && (
+              <div className="mt-4 border-t pt-4">
+                <h2 className="text-base font-medium text-gray-800 mb-3">
+                  Scan QRIS untuk bayar
+                </h2>
+                <div className="flex flex-col items-center space-y-2">
+                  <img
+                    src={qrUrl}
+                    alt="QRIS"
+                    className="w-48 h-48 object-contain border rounded-lg bg-white"
+                  />
+                  {orderId && (
+                    <p className="text-xs text-gray-500">Order ID: {orderId}</p>
+                  )}
+                  <p className="text-xs text-gray-500 text-center">
+                    Gunakan aplikasi pembayaran yang mendukung QRIS
+                    (GoPay, OVO, ShopeePay, dll)
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Footer */}
           <div className="px-6 py-4 border-t border-gray-100 text-center">
-            <span className="text-sm text-gray-500">Payment</span>
+            <span className="text-sm text-gray-500">Payment via Midtrans QRIS</span>
           </div>
         </div>
       </div>

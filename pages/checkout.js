@@ -9,19 +9,35 @@ export default function CheckoutPage() {
     if (saved) setCart(JSON.parse(saved));
   }, []);
 
+  // ----------------------------
+  // UPDATE QTY (versi baru)
+  // ----------------------------
   const updateQty = (id, delta) => {
-    const updated = cart.map((item) =>
-      item._id === id ? { ...item, qty: Math.max(1, (item.qty || 1) + delta) } : item
-    );
-    setCart(updated);
-    localStorage.setItem("cart", JSON.stringify(updated));
+    setCart((prevCart) => {
+      const updated = prevCart
+        .map((item) => {
+          if (item._id !== id) return item;
+
+          const currentQty = item.qty || 1;
+          const newQty = currentQty + delta;
+
+          // Kalau hasilnya 0 → hapus item
+          if (newQty <= 0) return null;
+
+          return { ...item, qty: newQty };
+        })
+        .filter(Boolean); // Buang item null (qty 0)
+
+      localStorage.setItem("cart", JSON.stringify(updated));
+      return updated;
+    });
   };
 
   const subtotal = cart.reduce(
     (sum, item) => sum + (item.price || 0) * (item.qty || 1),
     0
   );
-  const tax = Math.round(subtotal * 0.1); // 10% tax
+  const tax = Math.round(subtotal * 0.1);
   const total = subtotal + tax;
 
   const handleCheckout = async () => {
@@ -36,7 +52,6 @@ export default function CheckoutPage() {
         items: cart,
         total: total,
       };
-      // sertakan phoneNumber hanya kalau tersedia (mis. dari OTP flow)
       if (savedPhone) body.phone = savedPhone;
 
       const res = await fetch("/api/checkout", {
@@ -151,10 +166,11 @@ export default function CheckoutPage() {
                         {/* Quantity Controls */}
                         <div className="flex items-center mt-3 space-x-3">
                           <span className="text-sm text-gray-600 font-medium">Quantity:</span>
+
+                          {/* MINUS */}
                           <button
                             onClick={() => updateQty(item._id, -1)}
                             className="w-8 h-8 bg-gray-100 border border-gray-300 rounded-lg flex items-center justify-center text-gray-600 hover:bg-gray-200 transition-colors"
-                            disabled={item.qty <= 1}
                           >
                             <div className="w-4 h-4">
                               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -167,6 +183,7 @@ export default function CheckoutPage() {
                             {item.qty || 1}
                           </span>
 
+                          {/* PLUS */}
                           <button
                             onClick={() => updateQty(item._id, 1)}
                             className="w-8 h-8 bg-gray-100 border border-gray-300 rounded-lg flex items-center justify-center text-gray-600 hover:bg-gray-200 transition-colors"
@@ -186,7 +203,7 @@ export default function CheckoutPage() {
                           Rp{((item.price || 0) * (item.qty || 1)).toLocaleString()}
                         </p>
                         <p className="text-sm text-gray-500 mt-1">
-                          Total for {item.qty || 1} item{(item.qty || 1) > 1 ? 's' : ''}
+                          Total for {item.qty || 1} item{(item.qty || 1) > 1 ? "s" : ""}
                         </p>
                       </div>
                     </div>
@@ -196,7 +213,7 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          {/* Order Summary Section */}
+          {/* Order Summary */}
           {cart.length > 0 && (
             <div className="lg:col-span-1">
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 sticky top-8">
