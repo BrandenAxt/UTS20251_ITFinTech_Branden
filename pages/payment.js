@@ -7,15 +7,8 @@ export default function PaymentPage() {
   const [loading, setLoading] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState("");
 
-  // UNTUK QRIS CORE: kita tampung qrUrl & orderId di sini
-  const [qrUrl, setQrUrl] = useState(null);
-  const [orderId, setOrderId] = useState(null);
-
   const handlePay = async () => {
     setLoading(true);
-    setQrUrl(null);
-    setOrderId(null);
-
     try {
       const res = await fetch("/api/payment", {
         method: "POST",
@@ -27,49 +20,48 @@ export default function PaymentPage() {
         }),
       });
 
-      const data = await res.json();
+      // Try parse json safely
+      let data;
+      try {
+        data = await res.json();
+      } catch (e) {
+        const text = await res.text();
+        console.error("Non-JSON response from /api/payment:", text);
+        alert("Server returned non-JSON response. Cek console/logs.");
+        return;
+      }
+
       if (!data || !data.success) {
-        throw new Error((data && data.message) || "Payment gagal");
+        const msg = (data && (data.message || data.detail)) || "Payment gagal";
+        throw new Error(msg);
       }
 
-      // Support beberapa possible response shapes:
-      // 1) data.midtrans (object from core.charge)
-      // 2) data.midtransResponse
-      // 3) data.qr_url / data.qrUrl
-      // 4) data.snap_redirect_url (JANGAN redirect kalau mau QR)
-      const mid = data.midtrans || data.midtransResponse || data.midtrans_res || null;
-
-      // Ambil QR dari berbagai possible fields
-      const qrFromMid =
-        mid?.actions?.find((a) => a.name === "generate-qr-code")?.url ||
-        mid?.qr_url ||
-        mid?.qr_string ||
-        null;
-
-      // Fallback generic fields
-      const qrGeneric = data.qr_url || data.qrUrl || data.qr || qrFromMid || null;
-
-      // Ambil orderId dari response (jika ada)
-      const order = data.orderId || data.order_id || mid?.transaction_details?.order_id || null;
-
-      if (qrGeneric) {
-        setQrUrl(qrGeneric);
-        if (order) setOrderId(order);
-        return;
-      }
-
-      // If there's a snap redirect returned by server (old flow), we ignore it because we use QRIS core.
+      // If server returns snap redirect (SNAP flow) -> redirect
       if (data.snap_redirect_url) {
-        // Jangan redirect. Tampilkan message supaya dev aware.
-        console.warn("Server returned snap_redirect_url but frontend is set to use QRIS. Ignoring redirect.");
-        alert("Server memberikan SNAP URL. Namun aplikasi ini menggunakan QRIS (tanpa SNAP). Cek backend jika ingin gunakan SNAP.");
+        window.location.href = data.snap_redirect_url;
         return;
       }
 
-      // kalau gak ada qr
-      throw new Error("QR URL tidak ditemukan pada response. Cek log backend.");
+      // If server returns snap token instead (rare), build redirect
+      if (data.snap_token && data.snap_token.startsWith("SNAP-")) {
+        // If server sends only token, construct Snap redirect url (snap v4)
+        // NOTE: midtrans redirect url format may vary; preferred is redirect_url from server.
+        const redirectUrl = `https://app.midtrans.com/snap/v1/transactions/${data.snap_token}/payment`;
+        window.location.href = redirectUrl;
+        return;
+      }
+
+      // If server accidentally returned QR (core) -> inform dev
+      if (data.qr_url || data.qrUrl || data.qr) {
+        console.warn("Server returned QR (Core API) while frontend expects SNAP.", data);
+        alert("Server memberikan QR (Core API). Aplikasi ini sudah di-set untuk SNAP. Cek backend.");
+        return;
+      }
+
+      // fallback
+      throw new Error("SNAP URL/token tidak ditemukan di response server.");
     } catch (err) {
-      console.error(err);
+      console.error("Payment error:", err);
       alert("Error: " + (err.message || err));
     } finally {
       setLoading(false);
@@ -148,29 +140,14 @@ export default function PaymentPage() {
               {loading ? "Processing..." : "Confirm & Pay"}
             </button>
 
-            {/* QR Zone */}
-            {qrUrl && (
-              <div className="mt-4 border-t pt-4">
-                <h2 className="text-base font-medium text-gray-800 mb-3">Scan QRIS untuk bayar</h2>
-                <div className="flex flex-col items-center space-y-2">
-                  <img
-                    src={qrUrl}
-                    alt="QRIS"
-                    className="w-48 h-48 object-contain border rounded-lg bg-white"
-                  />
-                  {orderId && <p className="text-xs text-gray-500">Order ID: {orderId}</p>}
-                  <p className="text-xs text-gray-500 text-center">
-                    Gunakan aplikasi pembayaran yang mendukung QRIS (GoPay, OVO, ShopeePay, BCA Mobile, DANA, dll)
-                  </p>
-                </div>
-              </div>
-            )}
-
+            <div className="text-xs text-gray-500 text-center mt-3">
+              Note: This flow uses Midtrans SNAP. You will be redirected to Midtrans payment page.
+            </div>
           </div>
 
           {/* Footer */}
           <div className="px-6 py-4 border-t border-gray-100 text-center">
-            <span className="text-sm text-gray-500">Payment via Midtrans QRIS (Core API)</span>
+            <span className="text-sm text-gray-500">Payment via Midtrans SNAP</span>
           </div>
         </div>
       </div>

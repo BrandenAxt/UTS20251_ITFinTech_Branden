@@ -89,10 +89,12 @@ import Payment from "../../models/Payment";
 import Checkout from "../../models/Checkout";
 import { sendWhatsAppViaFonnte } from "../../lib/fonnte";
 import midtransClient from "midtrans-client";
+import util from "util";
 
 const isProduction = process.env.MIDTRANS_IS_PRODUCTION === "true";
 
-const core = new midtransClient.CoreApi({
+// Init Snap (NOT Core)
+const snap = new midtransClient.Snap({
   isProduction,
   serverKey: process.env.MIDTRANS_SERVER_KEY,
   clientKey: process.env.MIDTRANS_CLIENT_KEY,
@@ -117,10 +119,14 @@ export default async function handler(req, res) {
         });
       }
 
-      // simpan nomor HP
-      await Checkout.findByIdAndUpdate(checkoutId, { phone: phoneNumber });
+      // update phone di checkout
+      try {
+        await Checkout.findByIdAndUpdate(checkoutId, { phone: phoneNumber });
+      } catch (e) {
+        console.warn("Warning: update checkout phone gagal:", e);
+      }
 
-      // buat payment PENDING
+      // create payment pending
       const payment = await Payment.create({
         checkoutId,
         amount,
@@ -128,70 +134,83 @@ export default async function handler(req, res) {
         phone: phoneNumber,
       });
 
-      // kirim WA
-      try {
-        await sendWhatsAppViaFonnte(
-          phoneNumber,
-          `Pesanan diterima. Total: Rp ${Number(amount).toLocaleString()}`
-        );
-      } catch (err) {
-        console.warn("WA error:", err);
-      }
+      // pre-payment WA (non-blocking)
+      (async () => {
+        try {
+          await sendWhatsAppViaFonnte(
+            phoneNumber,
+            `Pesanan diterima ✅\nTotal: Rp ${Number(amount).toLocaleString()}`
+          );
+          console.log("Fonnte pre-payment WA sent.");
+        } catch (err) {
+          console.warn("Fonnte pre-payment WA failed:", err);
+        }
+      })();
 
-      // ============= QRIS CORE API =============
+      // Build snap transaction parameter
       const orderId = "ORDER-" + Date.now();
 
       const parameter = {
-        payment_type: "qris",
         transaction_details: {
           order_id: orderId,
           gross_amount: amount,
         },
+        item_details: [
+          {
+            id: checkoutId,
+            price: amount,
+            quantity: 1,
+            name: `Order ${checkoutId}`,
+          },
+        ],
         customer_details: {
-          first_name: phoneNumber,
+          first_name: phoneNumber || "Customer",
           phone: phoneNumber,
+        },
+        // Optional: you can restrict enabled payments
+        // enabled_payments: ["qris"], // uncomment jika mau paksa QRIS
+        callbacks: {
+          // Snap may ignore callbacks property; notification URL set in Dashboard is preferred
         },
       };
 
-      const midtransResponse = await core.charge(parameter);
-      console.log("MIDTRANS CORE RESPONSE:", midtransResponse);
+      // call snap.createTransaction()
+      const snapResponse = await snap.createTransaction(parameter);
+      // snapResponse usually contains: token and redirect_url
+      console.log("SNAP createTransaction response:", util.inspect(snapResponse, { depth: 4 }));
 
-      // simpan transaction ID
+      // save some snap info in payment doc
       await Payment.findByIdAndUpdate(payment._id, {
-        midtransTransactionId: midtransResponse.transaction_id,
+        midtransSnapToken: snapResponse.token || null,
+        midtransSnapUrl: snapResponse.redirect_url || null,
       });
 
-      // extract QR URL
-      const qrUrl =
-        midtransResponse?.actions?.find((a) => a.name === "generate-qr-code")
-          ?.url || midtransResponse.qr_url || null;
-
-      if (!qrUrl) {
-        return res.status(500).json({
-          success: false,
-          message: "QR URL tidak ditemukan dalam response midtrans",
-          midtransResponse,
-        });
-      }
-
-      console.log("QR URL:", qrUrl);
-
-      // KIRIM QR KE FRONTEND
+      // return snap redirect url to frontend
       return res.status(200).json({
         success: true,
+        payment,
         orderId,
-        qr_url: qrUrl,
-        midtrans: midtransResponse,
+        snap_redirect_url: snapResponse.redirect_url,
+        snap_token: snapResponse.token,
+        raw: snapResponse,
       });
     } catch (err) {
-      console.error("ERROR MIDTRANS:", err);
+      console.error("ERROR MIDTRANS SNAP:", err);
+      // build safe error payload
+      const safe = {
+        message: err?.message || String(err),
+        httpStatusCode: err?.httpStatusCode || null,
+        apiResponse: err?.ApiResponse || err?.apiResponse || null,
+        inspect: util.inspect(err, { depth: 4 }),
+      };
+      console.error("SAFE ERROR PROPS:", safe);
       return res.status(500).json({
         success: false,
-        message: "Gagal membuat payment",
-        error: err,
+        message: safe.message || "Gagal membuat payment",
+        detail: safe.apiResponse || safe.inspect,
       });
     }
   }
 
-  return res.status(405).end();
+  return res.status(405).json({ success: false, message: "Method not allowed" });
 }
