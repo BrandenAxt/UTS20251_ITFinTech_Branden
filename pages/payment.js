@@ -5,18 +5,14 @@ export default function PaymentPage() {
   const router = useRouter();
   const { checkoutId, amount } = router.query;
   const [loading, setLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState("credit-card");
-  const [shippingAddress, setShippingAddress] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
 
-  // TANPA TYPE
+  // QRIS Core API sudah tidak dipakai → hapus
   const [qrUrl, setQrUrl] = useState(null);
   const [orderId, setOrderId] = useState(null);
 
   const handlePay = async () => {
     setLoading(true);
-    setQrUrl(null);
-    setOrderId(null);
 
     try {
       const res = await fetch("/api/payment", {
@@ -26,7 +22,6 @@ export default function PaymentPage() {
           checkoutId,
           amount: Number(amount),
           phoneNumber,
-          shippingAddress,
         }),
       });
 
@@ -35,22 +30,13 @@ export default function PaymentPage() {
         throw new Error(data.message || "Payment gagal");
       }
 
-      const mid = data.midtrans;
-      setOrderId(data.orderId);
-
-      // buang `: any`, biarin JS biasa
-      const qr =
-        mid?.actions?.find(a => a.name === "generate-qr-code")?.url ||
-        mid?.qr_url ||
-        null;
-
-      if (!qr) {
-        console.error("Response Midtrans:", mid);
-        alert("QR URL tidak ditemukan di response Midtrans. Cek log backend.");
+      // === SNAP REDIRECT URL ===
+      if (data.snap_redirect_url) {
+        window.location.href = data.snap_redirect_url;
         return;
       }
 
-      setQrUrl(qr);
+      alert("SNAP URL tidak ditemukan.");
     } catch (err) {
       console.error(err);
       alert("Error: " + err.message);
@@ -85,17 +71,6 @@ export default function PaymentPage() {
           </div>
 
           <div className="px-6 py-6 space-y-6">
-            {/* Shipping Address */}
-            <div>
-              <h2 className="text-base font-medium text-gray-800 mb-3">Shipping Address</h2>
-              <textarea
-                value={shippingAddress}
-                onChange={(e) => setShippingAddress(e.target.value)}
-                placeholder="Enter your full shipping address..."
-                className="w-full p-3 border border-gray-200 rounded-lg bg-white focus:ring-2 resize-none placeholder-gray-500 text-gray-800"
-                rows={3}
-              />
-            </div>
 
             {/* Phone Number */}
             <div>
@@ -143,33 +118,11 @@ export default function PaymentPage() {
               {loading ? "Processing..." : "Confirm & Pay"}
             </button>
 
-            {/* QR Section */}
-            {qrUrl && (
-              <div className="mt-4 border-t pt-4">
-                <h2 className="text-base font-medium text-gray-800 mb-3">
-                  Scan QRIS untuk bayar
-                </h2>
-                <div className="flex flex-col items-center space-y-2">
-                  <img
-                    src={qrUrl}
-                    alt="QRIS"
-                    className="w-48 h-48 object-contain border rounded-lg bg-white"
-                  />
-                  {orderId && (
-                    <p className="text-xs text-gray-500">Order ID: {orderId}</p>
-                  )}
-                  <p className="text-xs text-gray-500 text-center">
-                    Gunakan aplikasi pembayaran yang mendukung QRIS
-                    (GoPay, OVO, ShopeePay, dll)
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Footer */}
           <div className="px-6 py-4 border-t border-gray-100 text-center">
-            <span className="text-sm text-gray-500">Payment via Midtrans QRIS</span>
+            <span className="text-sm text-gray-500">Payment via Midtrans SNAP QRIS</span>
           </div>
         </div>
       </div>

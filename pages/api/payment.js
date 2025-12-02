@@ -92,6 +92,7 @@ import midtransClient from "midtrans-client";
 
 const isProduction = process.env.MIDTRANS_IS_PRODUCTION === "true";
 
+// CoreApi tetap ada (biarin, ga dipake)
 const core = new midtransClient.CoreApi({
   isProduction,
   serverKey: process.env.MIDTRANS_SERVER_KEY,
@@ -101,31 +102,33 @@ const core = new midtransClient.CoreApi({
 export default async function handler(req, res) {
   await dbConnect();
 
-  // GET: list payment (biarin sama)
+  // ==========================
+  // GET LIST PAYMENT (TIDAK DIUBAH)
+  // ==========================
   if (req.method === "GET") {
     const payments = await Payment.find({});
     return res.status(200).json(payments);
   }
 
-  // POST: create payment + Midtrans QRIS
+  // ==========================
+  // POST: CREATE PAYMENT + SNAP QRIS
+  // ==========================
   if (req.method === "POST") {
     try {
       const { checkoutId, amount, phoneNumber } = req.body;
 
       if (!checkoutId || !amount || !phoneNumber) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message:
-              "Data tidak lengkap: checkoutId, amount, phoneNumber wajib.",
-          });
+        return res.status(400).json({
+          success: false,
+          message:
+            "Data tidak lengkap: checkoutId, amount, phoneNumber wajib.",
+        });
       }
 
-      // simpan nomor HP di checkout
+      // === Simpan nomor HP di checkout ===
       await Checkout.findByIdAndUpdate(checkoutId, { phone: phoneNumber });
 
-      // create payment pending di Mongo
+      // === Simpan payment pending ===
       const payment = await Payment.create({
         checkoutId,
         amount,
@@ -133,7 +136,7 @@ export default async function handler(req, res) {
         phone: phoneNumber,
       });
 
-      // kirim WA pendek (pre-payment) – sama seperti versi lama
+      // === Kirim WA pre-payment ===
       try {
         const msg = `Pesanan diterima ✅
 Total: Rp ${Number(amount).toLocaleString()}`;
@@ -148,44 +151,70 @@ Total: Rp ${Number(amount).toLocaleString()}`;
         console.error("Error kirim WA pre-payment:", err);
       }
 
-      // ======== MIDTRANS QRIS CHARGE DI SINI ========
+      // ================================
+      // 🔥 MIDTRANS SNAP QRIS DI SINI 🔥
+      // ================================
+      const orderId = "ORDER-" + Date.now();
 
-      const orderId = "ORDER-" + Date.now(); // ID order untuk Midtrans
+      const serverKey = process.env.MIDTRANS_SERVER_KEY;
+      const auth = "Basic " + Buffer.from(serverKey + ":").toString("base64");
 
-      const parameter = {
-        payment_type: "qris",
-        transaction_details: {
-          order_id: orderId,
-          gross_amount: amount,
-        },
-        customer_details: {
-          first_name: phoneNumber || "Customer",
-          phone: phoneNumber,
-        },
-      };
+      const snapRes = await fetch(
+        isProduction
+          ? "https://app.midtrans.com/snap/v1/transactions"
+          : "https://app.sandbox.midtrans.com/snap/v1/transactions",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: auth,
+          },
+          body: JSON.stringify({
+            transaction_details: {
+              order_id: orderId,
+              gross_amount: amount,
+            },
+            enabled_payments: ["qris"],
+            customer_details: {
+              first_name: phoneNumber || "Customer",
+              phone: phoneNumber,
+            },
+          }),
+        }
+      );
 
-      const midtransResponse = await core.charge(parameter);
-      console.log(">>> Midtrans QRIS response:", midtransResponse);
+      const snap = await snapRes.json();
+      console.log(">>> SNAP response:", snap);
 
-      // simpan transaction id midtrans di Payment (kalau schema strict, field extra ini bakal di-ignore, aman)
-      await Payment.findByIdAndUpdate(payment._id, {
-        midtransTransactionId: midtransResponse.transaction_id,
-      });
+      if (!snap?.redirect_url) {
+        console.error("SNAP ERROR:", snap);
+        return res.status(500).json({
+          success: false,
+          message: "Gagal membuat SNAP QRIS",
+        });
+      }
 
-      // kirim balik ke frontend – PaymentPage bakal baca midtrans + orderId
+      // Simpan orderId ke payment (opsional tapi bagus)
+      await Payment.findByIdAndUpdate(payment._id, { orderId });
+
+      // Kirim URL SNAP ke frontend
       return res.status(200).json({
         success: true,
         payment,
         orderId,
-        midtrans: midtransResponse,
+        snap_redirect_url: snap.redirect_url,
       });
+
     } catch (err) {
-      console.error("Payment error (Midtrans):", err?.response || err);
-      return res
-        .status(500)
-        .json({ success: false, message: "Gagal membuat payment" });
+      console.error("Payment error (Midtrans):", err);
+      return res.status(500).json({
+        success: false,
+        message: "Gagal membuat payment",
+      });
     }
   }
 
+  // METHOD NOT ALLOWED
   res.status(405).end();
 }
+
