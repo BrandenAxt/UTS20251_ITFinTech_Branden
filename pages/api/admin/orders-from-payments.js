@@ -1,21 +1,14 @@
 // pages/api/admin/orders-from-payments.js
 import dbConnect from "../../../lib/db";
 import Payment from "../../../models/Payment";
+import Checkout from "../../../models/Checkout";
 import mongoose from "mongoose";
 
-// optional: requireAdmin wrapper may exist in your project.
-// If you have lib/adminAuth.js that exports requireAdmin, change the import accordingly.
-// For now we try to use it if available, otherwise we fallback to a no-op.
 let requireAdmin = (handler) => handler;
 try {
-  // dynamic import attempt (works only on server)
-  // if file doesn't exist, we silently skip
-  // eslint-disable-next-line no-eval
   const auth = await import("../../../lib/adminAuth").catch(() => null);
   if (auth && auth.requireAdmin) requireAdmin = auth.requireAdmin;
-} catch (e) {
-  // ignore in case dynamic import not allowed
-}
+} catch (e) {}
 
 async function handler(req, res) {
   try {
@@ -30,24 +23,47 @@ async function handler(req, res) {
   if (status) q.status = status;
 
   try {
+    // Ambil semua payment
     const payments = await Payment.find(q)
       .sort({ _id: -1 })
       .skip((Number(page) - 1) * Number(limit))
       .limit(Number(limit))
       .lean();
 
-    const mapped = payments.map((p) => {
+    // 🔥 JOIN MANUAL DENGAN CHECKOUT
+    const checkoutIds = payments.map((p) => p.checkoutId);
+    const checkouts = await Checkout.find({
+      _id: { $in: checkoutIds },
+    }).lean();
+
+    const checkoutMap = {};
+    checkouts.forEach((c) => {
+      checkoutMap[String(c._id)] = c;
+    });
+
+    // 🔥 Kombinasi data Payment + Checkout
+    const result = payments.map((p) => {
+      const checkout = checkoutMap[p.checkoutId] || {};
+
+      // fallback createdAt
       if (!p.createdAt) {
         try {
           p.createdAt = new mongoose.Types.ObjectId(p._id).getTimestamp();
-        } catch (e) {
+        } catch {
           p.createdAt = null;
         }
       }
-      return p;
+
+      return {
+        ...p,
+        items: checkout.items || [],
+        phone: checkout.phone || p.phone || null,
+        total: checkout.total || p.amount,
+        checkoutStatus: checkout.status || p.status, // buat jaga-jaga
+      };
     });
 
-    return res.status(200).json(mapped);
+    return res.status(200).json(result);
   } catch (err) {
     console.error("Query payments error:", err);
     return res.status(500).json({ error: "Failed to fetch payments" });

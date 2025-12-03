@@ -6,6 +6,7 @@ export default function Home() {
   const [activeCategory, setActiveCategory] = useState("All");
   const [showLogoutPopup, setShowLogoutPopup] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [toast, setToast] = useState(""); // 🔥 TOAST STATE
 
   // ============================================================
   // LOCAL IMAGES
@@ -63,6 +64,9 @@ export default function Home() {
     if (savedCart) setCart(JSON.parse(savedCart));
   }, []);
 
+  // ============================================================
+  // ADD TO CART + TOAST
+  // ============================================================
   const addToCart = (product) => {
     const existing = cart.find((c) => c._id === product._id);
     let updated;
@@ -77,6 +81,10 @@ export default function Home() {
 
     setCart(updated);
     localStorage.setItem("cart", JSON.stringify(updated));
+
+    // 🔥 SHOW TOAST
+    setToast(`${product.name} berhasil ditambahkan ke keranjang!`);
+    setTimeout(() => setToast(""), 2000);
   };
 
   const handleLogout = () => {
@@ -127,6 +135,13 @@ export default function Home() {
   // ============================================================
   return (
     <div className="min-h-screen bg-gray-50">
+
+      {/* 🔥 TOAST NOTIFICATION */}
+      {toast && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 bg-black text-white px-4 py-2 rounded-lg shadow-lg z-50">
+          {toast}
+        </div>
+      )}
 
       {/* HEADER */}
       <div className="bg-white shadow-sm border-b">
@@ -261,12 +276,12 @@ export default function Home() {
 
               <div className="p-5">
 
-                {/* NAME → HITAM */}
+                {/* NAME */}  
                 <h3 className="font-semibold text-black text-lg">
                   {p.name}
                 </h3>
 
-                {/* PRICE → HITAM */}
+                {/* PRICE */}  
                 <p className="text-xl font-bold text-black mt-1">
                   Rp {p.price.toLocaleString()}
                 </p>

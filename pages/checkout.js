@@ -4,14 +4,50 @@ export default function CheckoutPage() {
   const [cart, setCart] = useState([]);
   const [loadingCheckout, setLoadingCheckout] = useState(false);
 
+  const productImages = {
+    "coffee latte": "/products/coffee_latte.jpg",
+    "joca coffee": "/products/joca_coffee.jpg",
+    "vanilla latte": "/products/vanilla_latte.jpg",
+    "cappuccino": "/products/cappuccino.jpg",
+    "americano": "/products/americano.jpg",
+    "vietnam drip": "/products/vietnam_drip.jpg",
+    "v60": "/products/v60.jpg",
+    "moccacino": "/products/moccacino.jpg",
+    "caramel latte": "/products/caramel_latte.jpg",
+    "hazelnut latte": "/products/hazelnut_latte.jpg",
+    "palm sugar latte": "/products/palm_sugar_latte.jpg",
+
+    "caramel milkshake": "/products/caramel_milkshake.jpg",
+    "choco milkshake": "/products/choco_milkshake.jpg",
+    "vanilla milkshake": "/products/vanilla_milkshake.jpg",
+    "soda gembira": "/products/soda_gembira.jpg",
+    "lemon squash": "/products/lemon_squash.jpg",
+    "lemon tea": "/products/lemon_tea.jpg",
+
+    "french fries": "/products/french_fries.jpg",
+    "chicken stick": "/products/chicken_stick.jpg",
+    "mix plate": "/products/mix_plate.jpg",
+    "indomie": "/products/indomie.jpg",
+
+    default: "/products/default.jpg",
+  };
+
+  const getProductImage = (item) => {
+    const name = item.name?.toLowerCase() || "";
+    return productImages[name] || productImages.default;
+  };
+
+  // ============================================================
+  // LOAD CART
+  // ============================================================
   useEffect(() => {
     const saved = localStorage.getItem("cart");
     if (saved) setCart(JSON.parse(saved));
   }, []);
 
-  // ----------------------------
+  // ============================================================
   // UPDATE QTY
-  // ----------------------------
+  // ============================================================
   const updateQty = (id, delta) => {
     setCart((prevCart) => {
       const updated = prevCart
@@ -36,7 +72,6 @@ export default function CheckoutPage() {
     0
   );
 
-  // HAPUS TAX → total = subtotal
   const total = subtotal;
 
   const handleCheckout = async () => {
@@ -49,7 +84,7 @@ export default function CheckoutPage() {
     try {
       const body = {
         items: cart,
-        total: total, // total tanpa tax
+        total: total,
       };
       if (savedPhone) body.phone = savedPhone;
 
@@ -77,6 +112,7 @@ export default function CheckoutPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -103,6 +139,7 @@ export default function CheckoutPage() {
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
           {/* Cart Items */}
           <div className="lg:col-span-2">
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -121,14 +158,13 @@ export default function CheckoutPage() {
                       key={item._id}
                       className="flex items-center space-x-4 p-4 border border-gray-200 rounded-lg"
                     >
-                      {/* Image */}
+                      {/* IMAGE (FINAL) */}
                       <div className="w-20 h-20 bg-gray-50 rounded-lg overflow-hidden">
                         <img
-                          src={item.image || item.images?.[0]}
+                          src={getProductImage(item)}
                           className="w-full h-full object-cover"
                           onError={(e) => {
-                            e.target.src =
-                              "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&q=80";
+                            e.target.src = "/products/default.jpg";
                           }}
                         />
                       </div>
@@ -141,22 +177,22 @@ export default function CheckoutPage() {
                           Rp{(item.price || 0).toLocaleString()} per item
                         </p>
 
-                        {/* Qty */}
+                        {/* QTY BUTTONS (HITAM) */}
                         <div className="flex items-center mt-3 space-x-3">
                           <button
                             onClick={() => updateQty(item._id, -1)}
-                            className="w-8 h-8 bg-gray-100 border border-gray-300 rounded-lg"
+                            className="w-8 h-8 bg-black text-white rounded-lg"
                           >
                             -
                           </button>
 
-                          <span className="w-12 text-center font-semibold">
+                          <span className="w-12 text-center font-semibold text-black">
                             {item.qty}
                           </span>
 
                           <button
                             onClick={() => updateQty(item._id, 1)}
-                            className="w-8 h-8 bg-gray-100 border border-gray-300 rounded-lg"
+                            className="w-8 h-8 bg-black text-white rounded-lg"
                           >
                             +
                           </button>
@@ -169,6 +205,7 @@ export default function CheckoutPage() {
                           {((item.price || 0) * (item.qty || 1)).toLocaleString()}
                         </p>
                       </div>
+
                     </div>
                   ))}
                 </div>
@@ -192,8 +229,6 @@ export default function CheckoutPage() {
                     </span>
                   </div>
 
-                  {/* TAX DIHAPUS */}
-
                   <div className="border-t border-gray-200 pt-4">
                     <div className="flex justify-between text-xl font-bold text-gray-800">
                       <span>Total</span>
@@ -209,9 +244,11 @@ export default function CheckoutPage() {
                 >
                   {loadingCheckout ? "Processing..." : "Pay"}
                 </button>
+
               </div>
             </div>
           )}
+
         </div>
       </div>
     </div>
