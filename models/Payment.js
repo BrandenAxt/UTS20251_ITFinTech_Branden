@@ -7,11 +7,13 @@ const PaymentSchema = new mongoose.Schema({
 
   phone: String,
 
-  midtransTransactionId: String,   // Penting
+  // Midtrans fields
+  midtransOrderId: String,          // ORDER-xxxx
+  midtransTransactionId: String,    // UUID (from webhook)
+
   midtransSnapToken: String,
   midtransSnapUrl: String,
 
-  xenditPaymentId: String,         
 }, { timestamps: true });
 
 export default mongoose.models.Payment || mongoose.model("Payment", PaymentSchema);

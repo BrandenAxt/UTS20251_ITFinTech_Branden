@@ -135,150 +135,102 @@ import Checkout from "../../models/Checkout";
 import { sendWhatsAppViaFonnte } from "../../lib/fonnte";
 import midtransClient from "midtrans-client";
 
-export const config = { api: { bodyParser: false } }; // tetap pakai raw body
+export const config = { api: { bodyParser: false } };
 
-// Normalisasi nomor HP (sama persis kayak versi Xendit)
 function normalizePhone(raw) {
   if (!raw) return null;
-  let s = String(raw).trim();
-  s = s.replace(/[\s\-\(\)]/g, "");
+  let s = String(raw).trim().replace(/[\s\-\(\)]/g, "");
   if (s.startsWith("+")) return s;
   if (s.startsWith("0")) return "+62" + s.slice(1);
-  if (/^62\d+/.test(s)) return "+" + s;
-  if (/^[8]\d+/.test(s) && s.length >= 8) return "+62" + s;
-  if (/^[1-9]\d+/.test(s) && s.length >= 8) return "+" + s;
+  if (/^62/.test(s)) return "+" + s;
+  if (/^[8]\d+/.test(s)) return "+62" + s;
   return "+" + s;
 }
 
-const isProduction = process.env.MIDTRANS_IS_PRODUCTION === "true";
-
 const core = new midtransClient.CoreApi({
-  isProduction,
+  isProduction: process.env.MIDTRANS_IS_PRODUCTION === "true",
   serverKey: process.env.MIDTRANS_SERVER_KEY,
   clientKey: process.env.MIDTRANS_CLIENT_KEY,
 });
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+    return res.status(405).json({ message: "Method not allowed" });
   }
 
   try {
     await dbConnect();
 
-    // 🔹 Baca raw body (karena bodyParser false)
+    // baca raw body
     const chunks = [];
     for await (const c of req) chunks.push(c);
-    const rawBody = Buffer.concat(chunks).toString("utf8");
+    const raw = Buffer.concat(chunks).toString("utf8");
 
-    let payload;
+    let payload = {};
     try {
-      payload = JSON.parse(rawBody);
+      payload = JSON.parse(raw);
     } catch (e) {
-      console.error("Midtrans webhook invalid JSON:", rawBody);
-      return res.status(400).json({ error: "Invalid JSON" });
+      console.error("Invalid JSON:", raw);
+      return res.status(400).json({ message: "Invalid JSON" });
     }
 
-    // 🔹 Pakai helper Midtrans buat dapetin status lengkap
-    const statusResponse = await core.transaction.notification(payload);
+    // ambil data lengkap status dari Midtrans
+    const status = await core.transaction.notification(payload);
 
-    console.log("MIDTRANS WEBHOOK:", statusResponse);
+    console.log("MIDTRANS WEBHOOK:", status);
 
-    const transactionId = statusResponse.transaction_id;
-    const orderId = statusResponse.order_id;
-    const transactionStatus = statusResponse.transaction_status;
-    const fraudStatus = statusResponse.fraud_status;
+    const transactionId = status.transaction_id;
+    const orderId = status.order_id;  // ORDER-xxxx
+    const transactionStatus = status.transaction_status;
+    const fraudStatus = status.fraud_status;
 
-    // 🔹 Map status Midtrans ke status internal
-    let isPaid = false;
-
-    if (transactionStatus === "capture") {
-      if (fraudStatus === "accept") isPaid = true;
-    } else if (transactionStatus === "settlement") {
-      isPaid = true;
-    } else if (
-      transactionStatus === "cancel" ||
-      transactionStatus === "deny" ||
-      transactionStatus === "expire"
-    ) {
-      isPaid = false;
-    } else if (transactionStatus === "pending") {
-      // pending, biarin
-    }
+    // tentukan paid
+    let isPaid =
+      transactionStatus === "settlement" ||
+      (transactionStatus === "capture" && fraudStatus === "accept");
 
     if (!isPaid) {
-      console.log("ℹ️ Midtrans status not paid yet:", transactionStatus);
       return res.status(200).json({ received: true });
     }
 
-    // 🔹 Cari payment berdasarkan midtransTransactionId (yang diset di /api/payment)
+    // Cari payment pakai midtransOrderId
     const payment = await Payment.findOneAndUpdate(
-      { midtransTransactionId: transactionId },
-      { status: "LUNAS" },
+      { midtransOrderId: orderId },
+      { status: "LUNAS", midtransTransactionId: transactionId },
       { new: true }
     );
 
     if (!payment) {
-      console.warn(
-        "Payment not found for transaction_id:",
-        transactionId,
-        "order_id:",
-        orderId
-      );
+      console.warn("Payment tidak ditemukan untuk:", orderId);
       return res.status(200).json({ received: true });
     }
 
-    console.log("✅ Payment updated to LUNAS:", payment._id);
+    console.log("Payment updated to LUNAS:", payment._id);
 
-    // 🔹 Ambil checkout detail
-    const checkout = await Checkout.findById(
-      payment.checkoutId || orderId
-    ).lean();
-
-    if (!checkout) {
-      console.warn("Checkout not found for:", payment.checkoutId || orderId);
-      return res.status(200).json({ received: true });
-    }
+    // Ambil checkout
+    const checkout = await Checkout.findById(payment.checkoutId).lean();
+    if (!checkout) return res.status(200).json({ received: true });
 
     const phone = normalizePhone(checkout.phone || payment.phone);
-    if (!phone) {
-      console.warn("No phone number found, skip WA notification");
-      return res.status(200).json({ received: true });
-    }
+    if (!phone) return res.status(200).json({ received: true });
 
-    // 🔹 Format pesan WA (gue biarin sama konsepnya)
-    let message = `✅ *Pembayaran Berhasil!*\n\nTerima kasih sudah berbelanja 🙌\n\n*Rincian Pesanan:*\n`;
-    if (checkout.items && Array.isArray(checkout.items)) {
-      checkout.items.forEach((it) => {
-        const qty = it.qty || 1;
-        message += `• ${it.name} x${qty} = Rp${Number(
-          it.price * qty
-        ).toLocaleString("id-ID")}\n`;
-      });
-    }
-    const total = checkout.total || payment.amount || 0;
-    message += `\n*Total:* Rp${Number(total).toLocaleString(
-      "id-ID"
-    )}\n\nPesanan Anda sedang diproses ✅`;
-
-    // 🔹 Kirim via Fonnte (pakai function lu yang sama)
+    // kirim WA invoice
     try {
-      const result = await sendWhatsAppViaFonnte(phone, message);
-      if (result.ok) {
-        console.log(`✅ Fonnte WA Invoice terkirim ke ${phone}`);
-      } else {
-        console.error(
-          `❌ Fonnte WA gagal kirim ke ${phone}. Reason:`,
-          result.reason
-        );
-      }
+      let msg = `✅ *Pembayaran Berhasil!*\n\n`;
+      msg += `Total: Rp${Number(payment.amount).toLocaleString("id-ID")}\n`;
+      msg += `Pesanan Anda sedang diproses ☕`;
+
+      await sendWhatsAppViaFonnte(phone, msg);
+      console.log("Invoice WA sent to", phone);
     } catch (e) {
-      console.error("Error kirim WA via Fonnte:", e);
+      console.error("Gagal kirim invoice WA:", e);
     }
 
     return res.status(200).json({ received: true });
+
   } catch (err) {
-    console.error("Midtrans Webhook main error:", err);
-    return res.status(200).json({ received: true }); // jangan bikin Midtrans retry terus
+    console.error("Webhook Error:", err);
+    return res.status(200).json({ received: true });
   }
 }
+

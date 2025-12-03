@@ -102,116 +102,86 @@ const snap = new midtransClient.Snap({
 export default async function handler(req, res) {
   await dbConnect();
 
-  // GET — LIST ALL PAYMENTS
-  if (req.method === "GET") {
-    const payments = await Payment.find({});
-    return res.status(200).json(payments);
+  if (req.method !== "POST") {
+    return res.status(405).json({ message: "Method not allowed" });
   }
 
-  // POST — CREATE PAYMENT
-  if (req.method === "POST") {
-    try {
-      const { checkoutId, amount, phoneNumber } = req.body;
+  try {
+    const { checkoutId, amount, phoneNumber } = req.body;
 
-      if (!checkoutId || !amount || !phoneNumber) {
-        return res.status(400).json({
-          success: false,
-          message: "checkoutId, amount, phoneNumber wajib diisi.",
-        });
-      }
-
-      // Save phone number into checkout
-      try {
-        await Checkout.findByIdAndUpdate(checkoutId, { phone: phoneNumber });
-      } catch (err) {
-        console.warn("Warning update checkout phone gagal:", err);
-      }
-
-      // Generate orderId for Midtrans
-      const orderId = "ORDER-" + Date.now();
-
-      // Create Payment PENDING
-      const payment = await Payment.create({
-        checkoutId,
-        amount,
-        status: "PENDING",
-        phone: phoneNumber,
-
-        // penting: supaya webhook MIDTRANS bisa find payment
-        midtransTransactionId: orderId,
-      });
-
-      // Kirim WA Pre-payment (non-blocking)
-      (async () => {
-        try {
-          await sendWhatsAppViaFonnte(
-            phoneNumber,
-            `Pesanan diterima ✅\nTotal: Rp ${Number(amount).toLocaleString()}`
-          );
-          console.log("Fonnte pre-payment WA sent.");
-        } catch (err) {
-          console.warn("Fonnte pre-payment WA failed:", err);
-        }
-      })();
-
-      // Build Snap transaction
-      const parameter = {
-        transaction_details: {
-          order_id: orderId,
-          gross_amount: amount,
-        },
-        item_details: [
-          {
-            id: checkoutId,
-            price: amount,
-            quantity: 1,
-            name: `Order ${checkoutId}`,
-          },
-        ],
-        customer_details: {
-          first_name: phoneNumber,
-          phone: phoneNumber,
-        },
-      };
-
-      // Create transaction Snap
-      const snapResponse = await snap.createTransaction(parameter);
-
-      // Store snap info into payment document
-      await Payment.findByIdAndUpdate(payment._id, {
-        midtransSnapToken: snapResponse.token || null,
-        midtransSnapUrl: snapResponse.redirect_url || null,
-      });
-
-      return res.status(200).json({
-        success: true,
-        payment,
-        orderId,
-        snap_redirect_url: snapResponse.redirect_url,
-        snap_token: snapResponse.token,
-        raw: snapResponse,
-      });
-
-    } catch (err) {
-      console.error("ERROR MIDTRANS SNAP:", err);
-
-      const safe = {
-        message: err?.message || String(err),
-        httpStatusCode: err?.httpStatusCode || null,
-        apiResponse: err?.ApiResponse || err?.apiResponse || null,
-        inspect: util.inspect(err, { depth: 4 }),
-      };
-
-      console.error("SAFE ERROR:", safe);
-
-      return res.status(500).json({
+    if (!checkoutId || !amount || !phoneNumber) {
+      return res.status(400).json({
         success: false,
-        message: safe.message || "Gagal membuat payment",
-        detail: safe.apiResponse || safe.inspect,
+        message: "checkoutId, amount, phoneNumber wajib diisi.",
       });
     }
-  }
 
-  return res.status(405).json({ success: false, message: "Method not allowed" });
+    // Save phone number to checkout
+    try {
+      await Checkout.findByIdAndUpdate(checkoutId, { phone: phoneNumber });
+    } catch (e) {
+      console.warn("Gagal update phone checkout:", e);
+    }
+
+    // Buat ORDER ID untuk Midtrans
+    const orderId = "ORDER-" + Date.now();
+
+    // Create Payment pending
+    const payment = await Payment.create({
+      checkoutId,
+      amount,
+      status: "PENDING",
+      phone: phoneNumber,
+      midtransOrderId: orderId,   // penting!
+    });
+
+    // Kirim pesan WA singkat
+    (async () => {
+      try {
+        await sendWhatsAppViaFonnte(
+          phoneNumber,
+          `Pesanan diterima ✅\nTotal: Rp ${Number(amount).toLocaleString()}`
+        );
+      } catch (e) {
+        console.warn("Gagal kirim WA pre-payment:", e);
+      }
+    })();
+
+    // Build Snap transaction
+    const parameter = {
+      transaction_details: {
+        order_id: orderId,
+        gross_amount: amount,
+      },
+      customer_details: {
+        first_name: phoneNumber,
+        phone: phoneNumber,
+      },
+    };
+
+    const snapResponse = await snap.createTransaction(parameter);
+
+    // Save Snap token/url
+    await Payment.findByIdAndUpdate(payment._id, {
+      midtransSnapToken: snapResponse.token,
+      midtransSnapUrl: snapResponse.redirect_url,
+    });
+
+    return res.status(200).json({
+      success: true,
+      payment,
+      orderId,
+      snap_redirect_url: snapResponse.redirect_url,
+      snap_token: snapResponse.token,
+    });
+
+  } catch (err) {
+    console.error("MIDTRANS PAYMENT ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Gagal membuat payment",
+    });
+  }
 }
+
 
