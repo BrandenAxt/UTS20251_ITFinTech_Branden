@@ -93,7 +93,6 @@ import util from "util";
 
 const isProduction = process.env.MIDTRANS_IS_PRODUCTION === "true";
 
-// Init Snap (NOT Core)
 const snap = new midtransClient.Snap({
   isProduction,
   serverKey: process.env.MIDTRANS_SERVER_KEY,
@@ -103,11 +102,13 @@ const snap = new midtransClient.Snap({
 export default async function handler(req, res) {
   await dbConnect();
 
+  // GET — LIST ALL PAYMENTS
   if (req.method === "GET") {
     const payments = await Payment.find({});
     return res.status(200).json(payments);
   }
 
+  // POST — CREATE PAYMENT
   if (req.method === "POST") {
     try {
       const { checkoutId, amount, phoneNumber } = req.body;
@@ -119,22 +120,28 @@ export default async function handler(req, res) {
         });
       }
 
-      // update phone di checkout
+      // Save phone number into checkout
       try {
         await Checkout.findByIdAndUpdate(checkoutId, { phone: phoneNumber });
-      } catch (e) {
-        console.warn("Warning: update checkout phone gagal:", e);
+      } catch (err) {
+        console.warn("Warning update checkout phone gagal:", err);
       }
 
-      // create payment pending
+      // Generate orderId for Midtrans
+      const orderId = "ORDER-" + Date.now();
+
+      // Create Payment PENDING
       const payment = await Payment.create({
         checkoutId,
         amount,
         status: "PENDING",
         phone: phoneNumber,
+
+        // penting: supaya webhook MIDTRANS bisa find payment
+        midtransTransactionId: orderId,
       });
 
-      // pre-payment WA (non-blocking)
+      // Kirim WA Pre-payment (non-blocking)
       (async () => {
         try {
           await sendWhatsAppViaFonnte(
@@ -147,9 +154,7 @@ export default async function handler(req, res) {
         }
       })();
 
-      // Build snap transaction parameter
-      const orderId = "ORDER-" + Date.now();
-
+      // Build Snap transaction
       const parameter = {
         transaction_details: {
           order_id: orderId,
@@ -164,28 +169,20 @@ export default async function handler(req, res) {
           },
         ],
         customer_details: {
-          first_name: phoneNumber || "Customer",
+          first_name: phoneNumber,
           phone: phoneNumber,
-        },
-        // Optional: you can restrict enabled payments
-        // enabled_payments: ["qris"], // uncomment jika mau paksa QRIS
-        callbacks: {
-          // Snap may ignore callbacks property; notification URL set in Dashboard is preferred
         },
       };
 
-      // call snap.createTransaction()
+      // Create transaction Snap
       const snapResponse = await snap.createTransaction(parameter);
-      // snapResponse usually contains: token and redirect_url
-      console.log("SNAP createTransaction response:", util.inspect(snapResponse, { depth: 4 }));
 
-      // save some snap info in payment doc
+      // Store snap info into payment document
       await Payment.findByIdAndUpdate(payment._id, {
         midtransSnapToken: snapResponse.token || null,
         midtransSnapUrl: snapResponse.redirect_url || null,
       });
 
-      // return snap redirect url to frontend
       return res.status(200).json({
         success: true,
         payment,
@@ -194,16 +191,19 @@ export default async function handler(req, res) {
         snap_token: snapResponse.token,
         raw: snapResponse,
       });
+
     } catch (err) {
       console.error("ERROR MIDTRANS SNAP:", err);
-      // build safe error payload
+
       const safe = {
         message: err?.message || String(err),
         httpStatusCode: err?.httpStatusCode || null,
         apiResponse: err?.ApiResponse || err?.apiResponse || null,
         inspect: util.inspect(err, { depth: 4 }),
       };
-      console.error("SAFE ERROR PROPS:", safe);
+
+      console.error("SAFE ERROR:", safe);
+
       return res.status(500).json({
         success: false,
         message: safe.message || "Gagal membuat payment",
@@ -214,3 +214,4 @@ export default async function handler(req, res) {
 
   return res.status(405).json({ success: false, message: "Method not allowed" });
 }
+
